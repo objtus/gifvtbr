@@ -137,9 +137,15 @@
         <div class="row"><label>口_閉</label>
           <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','closed',this)">
           <img class="thumb" id="th-mouth-closed"></div>
+        <div class="row"><label>口_小（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','small',this)">
+          <img class="thumb" id="th-mouth-small"></div>
         <div class="row"><label>口_開</label>
           <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','open',this)">
           <img class="thumb" id="th-mouth-open"></div>
+        <div class="row"><label>口_大（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','wide',this)">
+          <img class="thumb" id="th-mouth-wide"></div>
         <div class="row"><label>口_叫</label>
           <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','shout',this)">
           <img class="thumb" id="th-mouth-shout"></div>
@@ -209,31 +215,43 @@
         <div class="sec-note" id="mic-device-status" style="margin-top:4px">マイクの許可を求めています…</div>
       </div>
       <div class="section">
-        <div class="sec-title">音量閾値</div>
-        <div class="sec-note">スライダーを動かしながら下のメーターで音量との関係を確認できます。</div>
-        <!-- リアルタイム音量メーター（パネルを開いたまま閾値調整できる） -->
+        <div class="sec-title">口の5段階設定</div>
+        <div class="sec-note">音量（RMS%）が各閾値を超えると口ステートが切り替わります。口_小・口_大は素材未登録の場合は隣の段階にフォールバックします。</div>
+        <!-- リアルタイム音量メーター -->
         <div style="margin-bottom:14px">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px">現在の入力音量</div>
           <div style="position:relative;height:16px">
             <div style="height:100%;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden">
               <div id="audio-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#a78bfa,#f472b6);transition:width .04s"></div>
             </div>
-            <div id="threshold-marker" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#fbbf24;border-radius:1px;left:18%"></div>
-            <div id="shout-marker"     style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#ef4444;border-radius:1px;left:90%"></div>
+            <div id="threshold-marker" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#fbbf24;border-radius:1px;left:5%"></div>
+            <div id="level2-marker"    style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#34d399;border-radius:1px;left:15%"></div>
+            <div id="level3-marker"    style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#fb923c;border-radius:1px;left:30%"></div>
+            <div id="shout-marker"     style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#ef4444;border-radius:1px;left:60%"></div>
           </div>
-          <div style="display:flex;gap:16px;font-size:10px;color:#9ca3af;margin-top:4px">
-            <span style="color:#fbbf24">▎ 発話閾値</span>
-            <span style="color:#ef4444">▎ 叫び閾値</span>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:#9ca3af;margin-top:4px">
+            <span style="color:#fbbf24">▎ 口_小</span>
+            <span style="color:#34d399">▎ 口_開</span>
+            <span style="color:#fb923c">▎ 口_大</span>
+            <span style="color:#ef4444">▎ 口_叫</span>
           </div>
         </div>
-        <div class="row"><label>発話閾値 (%)</label>
-          <input type="range" min="1" max="80" value="5" id="aud-threshold"
-            oninput="cfg.audioThreshold=+this.value;document.getElementById('v-at').textContent=this.value">
-          <span class="val" id="v-at">5</span></div>
-        <div class="row"><label>叫び閾値 (%)</label>
-          <input type="range" min="1" max="100" value="30" id="aud-shout"
-            oninput="cfg.audioShout=+this.value;document.getElementById('v-as').textContent=this.value">
-          <span class="val" id="v-as">30</span></div>
+        <div class="row"><label>口_小 の閾値 (%)</label>
+          <input type="range" min="1" max="60" value="5" id="ls-level-1"
+            oninput="cfg.lipsyncLevels[1]=+this.value;document.getElementById('v-ls1').textContent=this.value">
+          <span class="val" id="v-ls1">5</span></div>
+        <div class="row"><label>口_開 の閾値 (%)</label>
+          <input type="range" min="1" max="70" value="15" id="ls-level-2"
+            oninput="cfg.lipsyncLevels[2]=+this.value;document.getElementById('v-ls2').textContent=this.value">
+          <span class="val" id="v-ls2">15</span></div>
+        <div class="row"><label>口_大 の閾値 (%)</label>
+          <input type="range" min="1" max="90" value="30" id="ls-level-3"
+            oninput="cfg.lipsyncLevels[3]=+this.value;document.getElementById('v-ls3').textContent=this.value">
+          <span class="val" id="v-ls3">30</span></div>
+        <div class="row"><label>口_叫 の閾値 (%)</label>
+          <input type="range" min="1" max="100" value="60" id="ls-level-4"
+            oninput="cfg.lipsyncLevels[4]=+this.value;document.getElementById('v-ls4').textContent=this.value">
+          <span class="val" id="v-ls4">60</span></div>
         <div class="row"><label>口閉じ遅延(ms)</label>
           <input type="range" min="50" max="600" step="10" value="180" id="aud-delay"
             oninput="cfg.mouthCloseDelay=+this.value;document.getElementById('v-ad').textContent=this.value">
@@ -243,6 +261,20 @@
             oninput="cfg.audioSmoothing=this.value/100;document.getElementById('v-sm').textContent=this.value+'%'">
           <span class="val" id="v-sm">30%</span></div>
         <div class="sec-note">0%=即時応答（キーボード音に反応しやすい）/ 大きいほど短い音に反応しにくくなる</div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🎛️ 帯域分割モード（施策D）</div>
+        <div class="sec-note">ONにすると全域RMSの代わりに<strong>中域（460〜1840Hz）</strong>を口開き判定の主軸にします。声の「実体」に反応しやすくなります。<br>歯擦音（サ行・ハ行）を高域で検出し、口_小として扱います。</div>
+        <div class="row"><label>帯域分割</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="band-split" onchange="cfg.bandSplit=this.checked">
+            <span style="font-size:11px;color:#94a3b8">中域RMS を使用（OFF=全域RMS）</span>
+          </label></div>
+        <div class="row"><label>歯擦音閾値 (%)</label>
+          <input type="range" min="1" max="50" value="15" id="sibilant-threshold"
+            oninput="cfg.sibilantThreshold=+this.value;document.getElementById('v-sib').textContent=this.value">
+          <span class="val" id="v-sib">15</span></div>
+        <div class="sec-note">歯擦音が強く中域が弱い場合に口_小を表示します（bandSplit ON 時のみ有効）。</div>
       </div>
     </div>
 
