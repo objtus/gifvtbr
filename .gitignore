@@ -1,0 +1,19 @@
+# 依存パッケージ
+node_modules/
+
+# electron-builder 出力
+dist/
+
+# アバター素材（個人ファイル）
+avatar/
+
+# Cursor IDE 設定
+.cursor/
+
+# ログ
+*.log
+npm-debug.log*
+
+# OS 生成ファイル
+.DS_Store
+Thumbs.db

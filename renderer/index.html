@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>gifvtbr v0.5</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="vvis"></div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <div class="hud-dot" id="mic-dot"></div>
+    <div id="mic-bar"><div id="mic-fill"></div></div>
+  </div>
+  <div id="input-status">–</div>
+</div>
+<div id="gear-btn" title="設定 (S)">⚙️</div>
+<div id="expr-toast">待機中</div>
+
+<!-- ══════════ 設定パネル ══════════ -->
+<div id="panel">
+  <!-- ドラッグバー：ここをつかんでウィンドウを移動できる（Electron時） -->
+  <div id="drag-bar">
+    <span class="drag-title">gifvtbr Settings</span>
+    <span class="drag-hint" id="drag-hint-text"></span>
+    <button class="close-btn" onclick="closePanel()" title="配信画面へ戻る (S)">✕</button>
+  </div>
+  <div class="panel-inner">
+    <div class="panel-title">🎭 gifvtbr <span style="font-size:12px;color:#6b7280;font-weight:400">v0.5</span></div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('layers')">🧩 ベースレイヤー</div>
+      <div class="tab" onclick="switchTab('variants')">🎭 差分スロット</div>
+      <div class="tab" onclick="switchTab('blink')">👁️ まばたき</div>
+      <div class="tab" onclick="switchTab('audio')">🎤 リップシンク</div>
+      <div class="tab" onclick="switchTab('anim')">🌬️ アニメーション</div>
+      <div class="tab" onclick="switchTab('input')">⌨️ 入力検知</div>
+      <div class="tab" onclick="switchTab('project')">💾 プロジェクト</div>
+    </div>
+
+    <!-- ── ベースレイヤータブ ── -->
+    <div class="tab-content active" id="tab-layers">
+
+      <div class="info-banner">
+        <strong>ベースレイヤー</strong>は「通常時」の全パーツ画像です。<br>
+        差分スロットでは、ここで登録した各レイヤーを<strong>任意に上書き</strong>して表情・衣装差分を作成します。
+      </div>
+
+      <!-- 背景 -->
+      <div class="section">
+        <div class="sec-title">🌆 背景 (bg)</div>
+        <div class="row"><label>背景画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('bg','default',this)">
+          <img class="thumb" id="th-bg-default"></div>
+      </div>
+
+      <!-- ボディ胴体 -->
+      <div class="section">
+        <div class="sec-title">🧍 ボディ胴体 (body_torso)</div>
+        <div class="sec-note">胸から下・衣装胴部。頭部とは別に追従遅延を設定できます。</div>
+        <div class="row"><label>胴体画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('body_torso','default',this)">
+          <img class="thumb" id="th-body_torso-default"></div>
+      </div>
+
+      <!-- ボディ頭部 -->
+      <div class="section">
+        <div class="sec-title">🗣️ ボディ頭部 (body_head)</div>
+        <div class="sec-note">頭・髪・首。目・口パーツと同じ遅延で動きます。胴体より少し遅らせると自然です。</div>
+        <div class="row"><label>頭部画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('body_head','default',this)">
+          <img class="thumb" id="th-body_head-default"></div>
+      </div>
+
+      <!-- 右手 / 左手 -->
+      <div class="section">
+        <div class="sec-title">🤝 手レイヤー（右手 / 左手 独立）</div>
+        <div class="sec-note">右手・左手を別々のレイヤーとして重ね合わせます。<br>マウス差分は右手だけ、キーボード差分は左手だけを変えれば「両方同時」も自動で成立します。</div>
+        <div class="hand-diagram">
+          <div class="hand-box">
+            <div class="hand-box-title r">右手 (hand_r)</div>
+            <div style="font-size:9px;color:#94a3b8">マウス操作 差分</div>
+          </div>
+          <div class="hand-box">
+            <div class="hand-box-title l">左手 (hand_l)</div>
+            <div style="font-size:9px;color:#94a3b8">キーボード操作 差分</div>
+          </div>
+          <div class="hand-combo">
+            <span class="combo-item">右手_マウス</span>
+            <span class="combo-plus">＋</span>
+            <span class="combo-item">左手_キーボード</span>
+            <span class="combo-plus">=</span>
+            <span class="combo-item" style="color:#a78bfa">両方同時 ✓</span>
+          </div>
+        </div>
+        <div class="row"><label style="color:#f9a8d4">右手_通常</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_r','default',this)">
+          <img class="thumb" id="th-hand_r-default"></div>
+        <div class="row"><label style="color:#f9a8d4">右手_マウス</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_r','mouse',this)">
+          <img class="thumb" id="th-hand_r-mouse"></div>
+        <div class="row"><label style="color:#93c5fd">左手_通常</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_l','default',this)">
+          <img class="thumb" id="th-hand_l-default"></div>
+        <div class="row"><label style="color:#93c5fd">左手_キーボード</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_l','keyboard',this)">
+          <img class="thumb" id="th-hand_l-keyboard"></div>
+        <div class="row"><label style="color:#6b7280">追従遅延(ms)</label>
+          <input type="range" min="-1" max="1000" value="60" id="hand-delay-l"
+            oninput="cfg.handFollowDelay=+this.value;document.getElementById('v-hd-l').textContent=this.value;document.getElementById('v-hd').textContent=this.value;document.getElementById('hand-delay').value=this.value">
+          <span class="val" id="v-hd-l">60</span></div>
+        <div class="sec-note">-1 = 追従しない（手が揺れない固定配置）</div>
+      </div>
+
+      <!-- 目 -->
+      <div class="section">
+        <div class="sec-title">👁️ 目 (eyes)</div>
+        <div class="sec-note">まばたきタブでモード設定。差分で「困り眉」などに上書き可能です。</div>
+        <div class="row"><label>目_開</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','open',this)">
+          <img class="thumb" id="th-eyes-open"></div>
+        <div class="row"><label>目_半（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','half',this)">
+          <img class="thumb" id="th-eyes-half"></div>
+        <div class="row"><label>目_閉</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','closed',this)">
+          <img class="thumb" id="th-eyes-closed"></div>
+        <div class="row"><label>まばたきGIF（任意）</label>
+          <input type="file" accept=".gif" onchange="loadBase('eyes','blinkgif',this)">
+          <img class="thumb" id="th-eyes-blinkgif"></div>
+      </div>
+
+      <!-- 口 -->
+      <div class="section">
+        <div class="sec-title">👄 口 (mouth)</div>
+        <div class="row"><label>口_閉</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','closed',this)">
+          <img class="thumb" id="th-mouth-closed"></div>
+        <div class="row"><label>口_開</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','open',this)">
+          <img class="thumb" id="th-mouth-open"></div>
+        <div class="row"><label>口_叫</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','shout',this)">
+          <img class="thumb" id="th-mouth-shout"></div>
+      </div>
+
+      <!-- 追加レイヤー -->
+      <div class="section">
+        <div class="sec-title">✨ 追加レイヤー (extra / fg)</div>
+        <div class="row"><label>アクセサリ等</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra','default',this)">
+          <img class="thumb" id="th-extra-default"></div>
+        <div class="row"><label>前景（最前面）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('fg','default',this)">
+          <img class="thumb" id="th-fg-default"></div>
+      </div>
+    </div>
+
+    <!-- ── 差分スロットタブ ── -->
+    <div class="tab-content" id="tab-variants">
+      <div class="info-banner">
+        <strong>差分スロット</strong>はベースレイヤーへの「パッチ」です。<br>
+        各スロットで「どのレイヤーをどの画像に差し替えるか」だけを指定します。<br>
+        <strong>指定しないレイヤーはベースのままになります。</strong><br>
+        例：「困り顔」→ 目レイヤーだけ差し替え。口・ボディはそのまま。
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <div style="font-size:12px;color:#94a3b8">ショートカット：<strong style="color:#a78bfa">Ctrl+1〜9</strong> / <strong style="color:#a78bfa">Ctrl+↑←→</strong>（同キーで解除）・<strong style="color:#a78bfa">Ctrl+0 / Ctrl+↓</strong> でリセット</div>
+      </div>
+      <div class="variant-list" id="variant-list"></div>
+    </div>
+
+    <!-- ── まばたきタブ ── -->
+    <div class="tab-content" id="tab-blink">
+      <div class="section">
+        <div class="sec-title">まばたきモード</div>
+        <div class="row"><label>モード</label>
+          <select id="blink-mode" onchange="cfg.blinkMode=this.value">
+            <option value="2">2枚（開/閉）</option>
+            <option value="3">3枚（開/半/閉）</option>
+            <option value="gif">GIF（単発再生）</option>
+          </select></div>
+        <div class="row"><label>間隔（秒）</label>
+          <input type="range" min="1" max="12" value="4" id="blink-interval"
+            oninput="cfg.blinkInterval=+this.value;document.getElementById('v-bi').textContent=this.value">
+          <span class="val" id="v-bi">4</span></div>
+        <div class="row"><label>ジッタ</label>
+          <input type="range" min="0" max="100" value="40" id="blink-jitter"
+            oninput="cfg.blinkJitter=this.value/100;document.getElementById('v-bj').textContent=(this.value/100).toFixed(2)">
+          <span class="val" id="v-bj">0.40</span></div>
+        <div class="row"><label>フレーム長(ms)</label>
+          <input type="range" min="20" max="120" value="50" id="blink-frame"
+            oninput="cfg.blinkFrameMs=+this.value;document.getElementById('v-bf').textContent=this.value">
+          <span class="val" id="v-bf">50</span></div>
+      </div>
+    </div>
+
+    <!-- ── リップシンクタブ ── -->
+    <div class="tab-content" id="tab-audio">
+      <div class="section">
+        <div class="sec-title">🎙️ 入力デバイス</div>
+        <div class="row">
+          <select id="mic-device" style="flex:1" onchange="initAudio(this.value)">
+            <option value="">（デバイスを選択してください）</option>
+          </select>
+          <button class="btn-ghost btn-sm" onclick="enumerateAudioDevices()" title="接続済みデバイスを再スキャン">再スキャン</button>
+        </div>
+        <div class="sec-note" id="mic-device-status" style="margin-top:4px">マイクの許可を求めています…</div>
+      </div>
+      <div class="section">
+        <div class="sec-title">音量閾値</div>
+        <div class="sec-note">スライダーを動かしながら下のメーターで音量との関係を確認できます。</div>
+        <!-- リアルタイム音量メーター（パネルを開いたまま閾値調整できる） -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px">現在の入力音量</div>
+          <div style="position:relative;height:16px">
+            <div style="height:100%;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden">
+              <div id="audio-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#a78bfa,#f472b6);transition:width .04s"></div>
+            </div>
+            <div id="threshold-marker" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#fbbf24;border-radius:1px;left:18%"></div>
+            <div id="shout-marker"     style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#ef4444;border-radius:1px;left:90%"></div>
+          </div>
+          <div style="display:flex;gap:16px;font-size:10px;color:#9ca3af;margin-top:4px">
+            <span style="color:#fbbf24">▎ 発話閾値</span>
+            <span style="color:#ef4444">▎ 叫び閾値</span>
+          </div>
+        </div>
+        <div class="row"><label>発話閾値 (%)</label>
+          <input type="range" min="1" max="80" value="5" id="aud-threshold"
+            oninput="cfg.audioThreshold=+this.value;document.getElementById('v-at').textContent=this.value">
+          <span class="val" id="v-at">5</span></div>
+        <div class="row"><label>叫び閾値 (%)</label>
+          <input type="range" min="1" max="100" value="30" id="aud-shout"
+            oninput="cfg.audioShout=+this.value;document.getElementById('v-as').textContent=this.value">
+          <span class="val" id="v-as">30</span></div>
+        <div class="row"><label>口閉じ遅延(ms)</label>
+          <input type="range" min="50" max="600" step="10" value="180" id="aud-delay"
+            oninput="cfg.mouthCloseDelay=+this.value;document.getElementById('v-ad').textContent=this.value">
+          <span class="val" id="v-ad">180</span></div>
+        <div class="row"><label>スムージング</label>
+          <input type="range" min="0" max="90" step="5" value="30" id="aud-smoothing"
+            oninput="cfg.audioSmoothing=this.value/100;document.getElementById('v-sm').textContent=this.value+'%'">
+          <span class="val" id="v-sm">30%</span></div>
+        <div class="sec-note">0%=即時応答（キーボード音に反応しやすい）/ 大きいほど短い音に反応しにくくなる</div>
+      </div>
+    </div>
+
+    <!-- ── アニメーションタブ ── -->
+    <div class="tab-content" id="tab-anim">
+      <div class="section">
+        <div class="sec-title">🎞️ アニメステップFPS（呼吸・バウンス）</div>
+        <div class="sec-note">呼吸揺れ・発話バウンス・GIF揺らぎの「コマ送り速度」です。低くするとリミテッドアニメ表現になります。まばたき・口パク・入力ポーズには影響しません。</div>
+        <div class="row"><label>アニメFPS</label>
+          <input type="range" min="1" max="60" value="30" id="fps-slider"
+            oninput="setAnimFps(+this.value)">
+          <span class="val" id="v-fps" style="width:48px">30fps</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;padding:0 0 4px 0;margin-top:-4px">
+          <span>1</span><span>4</span><span>8</span><span>12</span><span>16</span><span>24</span><span>30</span><span>60</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(4)">4</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(6)">6</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(8)">8</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(12)">12</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(15)">15</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(24)">24</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(30)">30</button>
+          <button class="btn-ghost btn-sm" onclick="setAnimFps(60)">60</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">📺 レンダーFPS（まばたき・口パク・入力ポーズ）</div>
+        <div class="sec-note">canvas を描き直す最大頻度です。高いほどまばたき・口パク・手ポーズの切り替わりが滑らかになります。下げるとCPU負荷が減ります。</div>
+        <div class="row"><label>レンダーFPS</label>
+          <input type="range" min="15" max="60" step="5" value="60" id="response-fps"
+            oninput="cfg.responseFps=+this.value;document.getElementById('v-rfps').textContent=this.value+'fps'">
+          <span class="val" id="v-rfps" style="width:48px">60fps</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🌬️ 呼吸揺れ（下端固定・上部伸縮）</div>
+        <div class="row"><label>振幅</label>
+          <input type="range" min="0" max="30" value="12" id="breath-amp"
+            oninput="cfg.breathAmp=this.value/1000;document.getElementById('v-ba').textContent=this.value">
+          <span class="val" id="v-ba">12</span></div>
+        <div class="row"><label>周期（秒）</label>
+          <input type="range" min="15" max="60" value="35" id="breath-period"
+            oninput="cfg.breathPeriod=this.value/10;document.getElementById('v-bp').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-bp">3.5</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🎵 発話バウンス（上方向のみ）</div>
+        <div class="row"><label>振幅(px)</label>
+          <input type="range" min="0" max="20" value="5" id="bounce-amp"
+            oninput="cfg.bounceAmp=+this.value;document.getElementById('v-boa').textContent=this.value">
+          <span class="val" id="v-boa">5</span></div>
+        <div class="row"><label>周期(ms)</label>
+          <input type="range" min="100" max="500" step="10" value="220" id="bounce-period"
+            oninput="cfg.bouncePeriod=+this.value;document.getElementById('v-bop').textContent=this.value">
+          <span class="val" id="v-bop">220</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">⏱️ 追従遅延（各パーツがアニメに追従するタイミングのズレ）</div>
+        <div class="sec-note">値を大きくするほど、そのパーツが「後からついてくる」ように動きます。0=即時追従。</div>
+        <div class="row"><label>胴体(ms)</label>
+          <input type="range" min="0" max="1000" value="0" id="torso-delay"
+            oninput="cfg.torsoFollowDelay=+this.value;document.getElementById('v-td').textContent=this.value">
+          <span class="val" id="v-td">0</span></div>
+        <div class="row"><label>頭部(ms)</label>
+          <input type="range" min="0" max="1000" value="30" id="head-delay"
+            oninput="cfg.headFollowDelay=+this.value;document.getElementById('v-hd2').textContent=this.value">
+          <span class="val" id="v-hd2">30</span></div>
+        <div class="row"><label>手(ms) / -1=固定</label>
+          <input type="range" min="-1" max="1000" value="60" id="hand-delay"
+            oninput="cfg.handFollowDelay=+this.value;document.getElementById('v-hd').textContent=this.value;document.getElementById('v-hd-l').textContent=this.value;document.getElementById('hand-delay-l').value=this.value">
+          <span class="val" id="v-hd">60</span></div>
+        <div class="sec-note">手を -1 にすると手が揺れず固定配置になります（デスク置きアイテム等に）。</div>
+      </div>
+    </div>
+
+    <!-- ── 入力検知タブ ── -->
+    <div class="tab-content" id="tab-input">
+      <div class="section">
+        <div class="sec-title">アクティブ判定時間</div>
+        <div class="row"><label>キーボード(ms)</label>
+          <input type="range" min="50" max="5000" step="50" value="2000" id="kb-timeout"
+            oninput="cfg.keyboardMs=+this.value;document.getElementById('v-kb').textContent=this.value">
+          <span class="val" id="v-kb">2000</span></div>
+        <div class="row"><label>マウス(ms)</label>
+          <input type="range" min="50" max="5000" step="50" value="1500" id="ms-timeout"
+            oninput="cfg.mouseMs=+this.value;document.getElementById('v-ms').textContent=this.value">
+          <span class="val" id="v-ms">1500</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">マウス移動 IPC スロットリング</div>
+        <div class="sec-note">グローバルマウス移動イベントを renderer に送る最小間隔。0 = 制限なし（全イベント処理）。高ポーリングレートのマウスでは 8〜16 ms 程度を推奨。</div>
+        <div class="row"><label>スロットリング(ms)</label>
+          <input type="range" min="0" max="200" step="4" value="0" id="ms-throttle"
+            oninput="cfg.mouseMoveThrottle=+this.value;document.getElementById('v-mst').textContent=this.value">
+          <span class="val" id="v-mst">0</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">現在の状態（プレビュー）</div>
+        <div style="font-size:12px;color:#94a3b8;line-height:2">
+          右手：<span id="status-rhand" style="color:#f9a8d4">–</span><br>
+          左手：<span id="status-lhand" style="color:#93c5fd">–</span><br>
+          両手：<span id="status-both" style="color:#a78bfa">–</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── プロジェクトタブ ── -->
+    <div class="tab-content" id="tab-project">
+      <div class="section">
+        <div class="sec-title">💾 プロジェクト保存</div>
+        <div class="sec-note">設定・全レイヤー画像・差分スロットをまとめてJSONファイルに書き出します。<br>画像はBase64でJSON内に埋め込まれるため、ファイル1つで持ち運びできます。</div>
+        <button class="btn" onclick="exportProject()" style="margin-top:8px">⬇ JSONとして保存</button>
+      </div>
+      <div class="section">
+        <div class="sec-title">📂 プロジェクト読み込み</div>
+        <div class="sec-note">以前に保存したJSONを読み込み、設定と画像を復元します。<br><strong>現在の設定は上書きされます。</strong></div>
+        <!-- ブラウザ用（Electron環境ではJS側で非表示にする） -->
+        <div class="row" style="margin-top:8px" id="import-row-browser">
+          <input type="file" accept=".json" onchange="importProject(this)" style="flex:1">
+        </div>
+        <!-- Electron用（ネイティブダイアログ） -->
+        <div class="row" style="margin-top:8px;display:none" id="import-row-electron">
+          <button class="btn" onclick="importProject()">📂 ファイルを選択して読み込む</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🌬️ GIFループ揺らぎ設定</div>
+        <div class="sec-note">GIF画像に微細なランダム揺れを加えて自然感を演出します。0で無効。</div>
+        <div class="row"><label>揺らぎ振幅(px)</label>
+          <input type="range" min="0" max="50" step="1" value="12" id="wobble-amp"
+            oninput="cfg.gifWobbleAmp=this.value/10;document.getElementById('v-wa').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-wa">1.2</span></div>
+        <div class="row"><label>揺らぎ周期(s)</label>
+          <input type="range" min="5" max="80" step="1" value="28" id="wobble-period"
+            oninput="cfg.gifWobblePeriod=this.value/10;document.getElementById('v-wp').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-wp">2.8</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
+      <button class="btn" onclick="closePanel()">✓ 配信画面へ</button>
+      <button class="btn-danger" id="quit-btn" style="display:none" onclick="quitApp()">✕ 終了</button>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>

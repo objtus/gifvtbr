@@ -1,0 +1,38 @@
+{
+  "name": "gifvtbr",
+  "version": "0.5.0",
+  "description": "GIF-based VTuber avatar engine for live streaming",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "gifuct-js": "^2.1.2",
+    "uiohook-napi": "^1.5.0"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.gifvtbr.app",
+    "productName": "gifvtbr",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "node_modules/**",
+      "!node_modules/.cache/**",
+      "!node_modules/electron/**",
+      "!node_modules/electron-builder/**"
+    ]
+  }
+}

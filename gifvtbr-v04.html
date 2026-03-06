@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>RichPNGtuber v0.3</title>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="vvis"></div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <div class="hud-dot" id="mic-dot"></div>
+    <div id="mic-bar"><div id="mic-fill"></div></div>
+  </div>
+  <div id="input-status">–</div>
+</div>
+<div id="gear-btn" title="設定 (S)">⚙️</div>
+<div id="expr-toast">待機中</div>
+
+<!-- ══════════ 設定パネル ══════════ -->
+<div id="panel">
+  <button class="close-btn" onclick="closePanel()">✕</button>
+  <div class="panel-inner">
+    <div class="panel-title">🎭 RichPNGtuber <span style="font-size:12px;color:#6b7280;font-weight:400">v0.3</span></div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('layers')">🧩 ベースレイヤー</div>
+      <div class="tab" onclick="switchTab('variants')">🎭 差分スロット</div>
+      <div class="tab" onclick="switchTab('blink')">👁️ まばたき</div>
+      <div class="tab" onclick="switchTab('audio')">🎤 リップシンク</div>
+      <div class="tab" onclick="switchTab('anim')">🌬️ アニメーション</div>
+      <div class="tab" onclick="switchTab('input')">⌨️ 入力検知</div>
+      <div class="tab" onclick="switchTab('project')">💾 プロジェクト</div>
+    </div>
+
+    <!-- ── ベースレイヤータブ ── -->
+    <div class="tab-content active" id="tab-layers">
+
+      <div class="info-banner">
+        <strong>ベースレイヤー</strong>は「通常時」の全パーツ画像です。<br>
+        差分スロットでは、ここで登録した各レイヤーを<strong>任意に上書き</strong>して表情・衣装差分を作成します。
+      </div>
+
+      <!-- 背景 -->
+      <div class="section">
+        <div class="sec-title">🌆 背景 (bg)</div>
+        <div class="row"><label>背景画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('bg','default',this)">
+          <img class="thumb" id="th-bg-default"></div>
+      </div>
+
+      <!-- ボディ胴体 -->
+      <div class="section">
+        <div class="sec-title">🧍 ボディ胴体 (body_torso)</div>
+        <div class="sec-note">胸から下・衣装胴部。頭部とは別に追従遅延を設定できます。</div>
+        <div class="row"><label>胴体画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('body_torso','default',this)">
+          <img class="thumb" id="th-body_torso-default"></div>
+      </div>
+
+      <!-- ボディ頭部 -->
+      <div class="section">
+        <div class="sec-title">🗣️ ボディ頭部 (body_head)</div>
+        <div class="sec-note">頭・髪・首。目・口パーツと同じ遅延で動きます。胴体より少し遅らせると自然です。</div>
+        <div class="row"><label>頭部画像</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('body_head','default',this)">
+          <img class="thumb" id="th-body_head-default"></div>
+      </div>
+
+      <!-- 右手 / 左手 -->
+      <div class="section">
+        <div class="sec-title">🤝 手レイヤー（右手 / 左手 独立）</div>
+        <div class="sec-note">右手・左手を別々のレイヤーとして重ね合わせます。<br>マウス差分は右手だけ、キーボード差分は左手だけを変えれば「両方同時」も自動で成立します。</div>
+        <div class="hand-diagram">
+          <div class="hand-box">
+            <div class="hand-box-title r">右手 (hand_r)</div>
+            <div style="font-size:9px;color:#94a3b8">マウス操作 差分</div>
+          </div>
+          <div class="hand-box">
+            <div class="hand-box-title l">左手 (hand_l)</div>
+            <div style="font-size:9px;color:#94a3b8">キーボード操作 差分</div>
+          </div>
+          <div class="hand-combo">
+            <span class="combo-item">右手_マウス</span>
+            <span class="combo-plus">＋</span>
+            <span class="combo-item">左手_キーボード</span>
+            <span class="combo-plus">=</span>
+            <span class="combo-item" style="color:#a78bfa">両方同時 ✓</span>
+          </div>
+        </div>
+        <div class="row"><label style="color:#f9a8d4">右手_通常</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_r','default',this)">
+          <img class="thumb" id="th-hand_r-default"></div>
+        <div class="row"><label style="color:#f9a8d4">右手_マウス</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_r','mouse',this)">
+          <img class="thumb" id="th-hand_r-mouse"></div>
+        <div class="row"><label style="color:#93c5fd">左手_通常</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_l','default',this)">
+          <img class="thumb" id="th-hand_l-default"></div>
+        <div class="row"><label style="color:#93c5fd">左手_キーボード</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('hand_l','keyboard',this)">
+          <img class="thumb" id="th-hand_l-keyboard"></div>
+        <div class="row"><label style="color:#6b7280">追従遅延(ms)</label>
+          <input type="range" min="-1" max="300" value="60" id="hand-delay"
+            oninput="cfg.handFollowDelay=+this.value;document.getElementById('v-hd').textContent=this.value">
+          <span class="val" id="v-hd">60</span></div>
+        <div class="sec-note">-1 = 追従しない（手が揺れない固定配置）</div>
+      </div>
+
+      <!-- 目 -->
+      <div class="section">
+        <div class="sec-title">👁️ 目 (eyes)</div>
+        <div class="sec-note">まばたきタブでモード設定。差分で「困り眉」などに上書き可能です。</div>
+        <div class="row"><label>目_開</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','open',this)">
+          <img class="thumb" id="th-eyes-open"></div>
+        <div class="row"><label>目_半（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','half',this)">
+          <img class="thumb" id="th-eyes-half"></div>
+        <div class="row"><label>目_閉</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('eyes','closed',this)">
+          <img class="thumb" id="th-eyes-closed"></div>
+        <div class="row"><label>まばたきGIF（任意）</label>
+          <input type="file" accept=".gif" onchange="loadBase('eyes','blinkgif',this)">
+          <img class="thumb" id="th-eyes-blinkgif"></div>
+      </div>
+
+      <!-- 口 -->
+      <div class="section">
+        <div class="sec-title">👄 口 (mouth)</div>
+        <div class="row"><label>口_閉</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','closed',this)">
+          <img class="thumb" id="th-mouth-closed"></div>
+        <div class="row"><label>口_開</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','open',this)">
+          <img class="thumb" id="th-mouth-open"></div>
+        <div class="row"><label>口_叫</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','shout',this)">
+          <img class="thumb" id="th-mouth-shout"></div>
+      </div>
+
+      <!-- 追加レイヤー -->
+      <div class="section">
+        <div class="sec-title">✨ 追加レイヤー (extra / fg)</div>
+        <div class="row"><label>アクセサリ等</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra','default',this)">
+          <img class="thumb" id="th-extra-default"></div>
+        <div class="row"><label>前景（最前面）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('fg','default',this)">
+          <img class="thumb" id="th-fg-default"></div>
+      </div>
+    </div>
+
+    <!-- ── 差分スロットタブ ── -->
+    <div class="tab-content" id="tab-variants">
+      <div class="info-banner">
+        <strong>差分スロット</strong>はベースレイヤーへの「パッチ」です。<br>
+        各スロットで「どのレイヤーをどの画像に差し替えるか」だけを指定します。<br>
+        <strong>指定しないレイヤーはベースのままになります。</strong><br>
+        例：「困り顔」→ 目レイヤーだけ差し替え。口・ボディはそのまま。
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+        <div style="font-size:12px;color:#94a3b8">ショートカット：数字キー <strong style="color:#a78bfa">1〜8</strong>（同キーで解除）・<strong style="color:#a78bfa">0</strong> でリセット</div>
+      </div>
+      <div class="variant-list" id="variant-list"></div>
+    </div>
+
+    <!-- ── まばたきタブ ── -->
+    <div class="tab-content" id="tab-blink">
+      <div class="section">
+        <div class="sec-title">まばたきモード</div>
+        <div class="row"><label>モード</label>
+          <select id="blink-mode" onchange="cfg.blinkMode=this.value">
+            <option value="2">2枚（開/閉）</option>
+            <option value="3">3枚（開/半/閉）</option>
+            <option value="gif">GIF（単発再生）</option>
+          </select></div>
+        <div class="row"><label>間隔（秒）</label>
+          <input type="range" min="1" max="12" value="4" id="blink-interval"
+            oninput="cfg.blinkInterval=+this.value;document.getElementById('v-bi').textContent=this.value">
+          <span class="val" id="v-bi">4</span></div>
+        <div class="row"><label>ジッタ</label>
+          <input type="range" min="0" max="100" value="40" id="blink-jitter"
+            oninput="cfg.blinkJitter=this.value/100;document.getElementById('v-bj').textContent=(this.value/100).toFixed(2)">
+          <span class="val" id="v-bj">0.40</span></div>
+        <div class="row"><label>フレーム長(ms)</label>
+          <input type="range" min="20" max="120" value="50" id="blink-frame"
+            oninput="cfg.blinkFrameMs=+this.value;document.getElementById('v-bf').textContent=this.value">
+          <span class="val" id="v-bf">50</span></div>
+      </div>
+    </div>
+
+    <!-- ── リップシンクタブ ── -->
+    <div class="tab-content" id="tab-audio">
+      <div class="section">
+        <div class="sec-title">音量閾値</div>
+        <div class="row"><label>発話閾値</label>
+          <input type="range" min="1" max="60" value="12" id="aud-threshold"
+            oninput="cfg.audioThreshold=+this.value;document.getElementById('v-at').textContent=this.value">
+          <span class="val" id="v-at">12</span></div>
+        <div class="row"><label>叫び閾値</label>
+          <input type="range" min="20" max="100" value="60" id="aud-shout"
+            oninput="cfg.audioShout=+this.value;document.getElementById('v-as').textContent=this.value">
+          <span class="val" id="v-as">60</span></div>
+        <div class="row"><label>口閉じ遅延(ms)</label>
+          <input type="range" min="50" max="600" step="10" value="180" id="aud-delay"
+            oninput="cfg.mouthCloseDelay=+this.value;document.getElementById('v-ad').textContent=this.value">
+          <span class="val" id="v-ad">180</span></div>
+      </div>
+    </div>
+
+    <!-- ── アニメーションタブ ── -->
+    <div class="tab-content" id="tab-anim">
+      <div class="section">
+        <div class="sec-title">🎞️ 描画FPS</div>
+        <div class="sec-note">低FPS設定でGIFアニメとフレームをマッチさせるリミテッドアニメ表現が可能です。</div>
+        <div class="row"><label>FPS上限</label>
+          <input type="range" min="1" max="60" value="30" id="fps-slider"
+            oninput="cfg.targetFps=+this.value;document.getElementById('v-fps').textContent=this.value+'fps'">
+          <span class="val" id="v-fps" style="width:48px">30fps</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;padding:0 0 4px 0;margin-top:-4px">
+          <span>1</span><span>4</span><span>8</span><span>12</span><span>16</span><span>24</span><span>30</span><span>60</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn-ghost btn-sm" onclick="setFps(4)">4</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(6)">6</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(8)">8</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(12)">12</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(15)">15</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(24)">24</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(30)">30</button>
+          <button class="btn-ghost btn-sm" onclick="setFps(60)">60</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🌬️ 呼吸揺れ（下端固定・上部伸縮）</div>
+        <div class="row"><label>振幅</label>
+          <input type="range" min="0" max="30" value="12" id="breath-amp"
+            oninput="cfg.breathAmp=this.value/1000;document.getElementById('v-ba').textContent=this.value">
+          <span class="val" id="v-ba">12</span></div>
+        <div class="row"><label>周期（秒）</label>
+          <input type="range" min="15" max="60" value="35" id="breath-period"
+            oninput="cfg.breathPeriod=this.value/10;document.getElementById('v-bp').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-bp">3.5</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🎵 発話バウンス（上方向のみ）</div>
+        <div class="row"><label>振幅(px)</label>
+          <input type="range" min="0" max="20" value="5" id="bounce-amp"
+            oninput="cfg.bounceAmp=+this.value;document.getElementById('v-boa').textContent=this.value">
+          <span class="val" id="v-boa">5</span></div>
+        <div class="row"><label>周期(ms)</label>
+          <input type="range" min="100" max="500" step="10" value="220" id="bounce-period"
+            oninput="cfg.bouncePeriod=+this.value;document.getElementById('v-bop').textContent=this.value">
+          <span class="val" id="v-bop">220</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">⏱️ 追従遅延（各パーツがアニメに追従するタイミングのズレ）</div>
+        <div class="sec-note">値を大きくするほど、そのパーツが「後からついてくる」ように動きます。0=即時追従。</div>
+        <div class="row"><label>胴体(ms)</label>
+          <input type="range" min="0" max="200" value="0" id="torso-delay"
+            oninput="cfg.torsoFollowDelay=+this.value;document.getElementById('v-td').textContent=this.value">
+          <span class="val" id="v-td">0</span></div>
+        <div class="row"><label>頭部(ms)</label>
+          <input type="range" min="0" max="200" value="30" id="head-delay"
+            oninput="cfg.headFollowDelay=+this.value;document.getElementById('v-hd2').textContent=this.value">
+          <span class="val" id="v-hd2">30</span></div>
+        <div class="row"><label>手(ms) / -1=固定</label>
+          <input type="range" min="-1" max="300" value="60" id="hand-delay"
+            oninput="cfg.handFollowDelay=+this.value;document.getElementById('v-hd').textContent=this.value">
+          <span class="val" id="v-hd">60</span></div>
+        <div class="sec-note">手を -1 にすると手が揺れず固定配置になります（デスク置きアイテム等に）。</div>
+      </div>
+    </div>
+
+    <!-- ── 入力検知タブ ── -->
+    <div class="tab-content" id="tab-input">
+      <div class="section">
+        <div class="sec-title">アクティブ判定時間</div>
+        <div class="row"><label>キーボード(ms)</label>
+          <input type="range" min="500" max="5000" step="100" value="2000" id="kb-timeout"
+            oninput="cfg.keyboardMs=+this.value;document.getElementById('v-kb').textContent=this.value">
+          <span class="val" id="v-kb">2000</span></div>
+        <div class="row"><label>マウス(ms)</label>
+          <input type="range" min="500" max="5000" step="100" value="1500" id="ms-timeout"
+            oninput="cfg.mouseMs=+this.value;document.getElementById('v-ms').textContent=this.value">
+          <span class="val" id="v-ms">1500</span></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">現在の状態（プレビュー）</div>
+        <div style="font-size:12px;color:#94a3b8;line-height:2">
+          右手：<span id="status-rhand" style="color:#f9a8d4">–</span><br>
+          左手：<span id="status-lhand" style="color:#93c5fd">–</span><br>
+          両手：<span id="status-both" style="color:#a78bfa">–</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── プロジェクトタブ ── -->
+    <div class="tab-content" id="tab-project">
+      <div class="section">
+        <div class="sec-title">💾 プロジェクト保存</div>
+        <div class="sec-note">設定・全レイヤー画像・差分スロットをまとめてJSONファイルに書き出します。<br>画像はBase64でJSON内に埋め込まれるため、ファイル1つで持ち運びできます。</div>
+        <button class="btn" onclick="exportProject()" style="margin-top:8px">⬇ JSONとして保存</button>
+      </div>
+      <div class="section">
+        <div class="sec-title">📂 プロジェクト読み込み</div>
+        <div class="sec-note">以前に保存したJSONを読み込み、設定と画像を復元します。<br><strong>現在の設定は上書きされます。</strong></div>
+        <div class="row" style="margin-top:8px">
+          <input type="file" accept=".json" onchange="importProject(this)" style="flex:1">
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🌬️ GIFループ揺らぎ設定</div>
+        <div class="sec-note">GIF画像に微細なランダム揺れを加えて自然感を演出します。0で無効。</div>
+        <div class="row"><label>揺らぎ振幅(px)</label>
+          <input type="range" min="0" max="50" step="1" value="12" id="wobble-amp"
+            oninput="cfg.gifWobbleAmp=this.value/10;document.getElementById('v-wa').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-wa">1.2</span></div>
+        <div class="row"><label>揺らぎ周期(s)</label>
+          <input type="range" min="5" max="80" step="1" value="28" id="wobble-period"
+            oninput="cfg.gifWobblePeriod=this.value/10;document.getElementById('v-wp').textContent=(this.value/10).toFixed(1)">
+          <span class="val" id="v-wp">2.8</span></div>
+      </div>
+    </div>
+
+    <button class="btn" onclick="closePanel()" style="margin-top:16px">✓ 配信画面へ</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const cfg = {
+  audioThreshold:12, audioShout:60, mouthCloseDelay:180,
+  blinkMode:'2', blinkInterval:4, blinkJitter:.4, blinkFrameMs:50,
+  breathAmp:.012, breathPeriod:3.5,
+  bounceAmp:5, bouncePeriod:220,
+  keyboardMs:2000, mouseMs:1500,
+  handFollowDelay:60, torsoFollowDelay:0, headFollowDelay:30,
+  targetFps:30,
+  gifWobbleAmp:1.2, gifWobblePeriod:2.8,
+};
+
+// ══════════════════════════════════════════
+//  GIF単発再生エンジン (gifuct-js)
+// ══════════════════════════════════════════
+const GifPlayer = (() => {
+  let frames=[], cursor=-1, frameTimer=null, offCanvas=null, offCtx=null, loaded=false;
+
+  function ensureLib(cb) {
+    if (loaded) { cb(); return; }
+    if (window.parseGIF) { loaded=true; cb(); return; }
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js';
+    s.onload=()=>{ loaded=true; cb(); };
+    s.onerror=()=>console.warn('gifuct-js load failed');
+    document.head.appendChild(s);
+  }
+
+  async function load(url) {
+    return new Promise((res,rej)=>{
+      ensureLib(async ()=>{
+        try {
+          const buf=await (await fetch(url)).arrayBuffer();
+          const raw=window.decompressFrames(window.parseGIF(buf),true);
+          offCanvas=document.createElement('canvas');
+          offCtx=offCanvas.getContext('2d');
+          offCanvas.width=raw[0].dims.width; offCanvas.height=raw[0].dims.height;
+          frames=raw.map(f=>({
+            patch:new ImageData(new Uint8ClampedArray(f.patch),f.dims.width,f.dims.height),
+            delay:(f.delay||8)*10,
+          }));
+          cursor=-1; res();
+        } catch(e){ frames=[]; rej(e); }
+      });
+    });
+  }
+
+  function play(onEnd) {
+    if(!frames.length) return;
+    clearTimeout(frameTimer); cursor=0; step(onEnd);
+  }
+  function step(onEnd) {
+    if(cursor<0||cursor>=frames.length){ cursor=-1; if(onEnd)onEnd(); return; }
+    offCtx.putImageData(frames[cursor].patch,0,0);
+    frameTimer=setTimeout(()=>{ cursor++; step(onEnd); }, frames[cursor-1]?.delay||80);
+  }
+
+  return {
+    load, play,
+    getCanvas:()=>(offCanvas&&cursor>=0)?offCanvas:null,
+    isReady:()=>frames.length>0,
+    isPlaying:()=>cursor>=0,
+  };
+})();
+
+// ══════════════════════════════════════════
+//  BASE IMAGES
+// ══════════════════════════════════════════
+const BASE = {
+  bg:{default:null}, body_torso:{default:null}, body_head:{default:null},
+  hand_r:{default:null,mouse:null}, hand_l:{default:null,keyboard:null},
+  eyes:{open:null,half:null,closed:null,blinkgif:null},
+  mouth:{closed:null,open:null,shout:null},
+  extra:{default:null}, fg:{default:null},
+};
+const BASE_SRCS = {}; // key="layer__state" → dataURL（保存用）
+
+function loadBase(layer, state, input) {
+  const file=input.files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  const img=new Image(); img.src=url;
+  BASE[layer][state]=img;
+  // DataURL化して保存用に保持
+  const fr=new FileReader();
+  fr.onload=e=>{ BASE_SRCS[`${layer}__${state}`]=e.target.result; };
+  fr.readAsDataURL(file);
+  const th=document.getElementById(`th-${layer}-${state}`);
+  if(th){ th.src=url; th.classList.add('has'); }
+  if(layer==='eyes'&&state==='blinkgif')
+    GifPlayer.load(url).catch(e=>console.warn('GIF:',e));
+}
+
+// ══════════════════════════════════════════
+//  VARIANT（パッチ式差分）
+// ══════════════════════════════════════════
+const PATCHABLE=[
+  {id:'body_torso-default',label:'ボディ(胴体)',layer:'body_torso',state:'default'},
+  {id:'body_head-default', label:'ボディ(頭部)',layer:'body_head', state:'default'},
+  {id:'eyes-open',         label:'目_開',       layer:'eyes',      state:'open'},
+  {id:'eyes-half',         label:'目_半',       layer:'eyes',      state:'half'},
+  {id:'eyes-closed',       label:'目_閉',       layer:'eyes',      state:'closed'},
+  {id:'mouth-closed',      label:'口_閉',       layer:'mouth',     state:'closed'},
+  {id:'mouth-open',        label:'口_開',       layer:'mouth',     state:'open'},
+  {id:'mouth-shout',       label:'口_叫',       layer:'mouth',     state:'shout'},
+  {id:'hand_r-default',    label:'右手_通常',   layer:'hand_r',    state:'default'},
+  {id:'hand_r-mouse',      label:'右手_マウス', layer:'hand_r',    state:'mouse'},
+  {id:'hand_l-default',    label:'左手_通常',   layer:'hand_l',    state:'default'},
+  {id:'hand_l-keyboard',   label:'左手_KB',     layer:'hand_l',    state:'keyboard'},
+  {id:'extra-default',     label:'アクセサリ',  layer:'extra',     state:'default'},
+  {id:'fg-default',        label:'前景',        layer:'fg',        state:'default'},
+];
+
+const variants=Array.from({length:8},(_,i)=>({label:`差分${i+1}`,patches:{},open:false}));
+let activeVariant=-1;
+
+function resolveLayer(layer,state){
+  if(activeVariant>=0){
+    const p=variants[activeVariant].patches[`${layer}-${state}`];
+    if(p?.img) return p.img;
+  }
+  return BASE[layer][state];
+}
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+const S={talking:false,shouting:false,blinkFrame:0,isMouseActive:false,isKbActive:false};
+
+// ══════════════════════════════════════════
+//  CANVAS
+// ══════════════════════════════════════════
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W=innerWidth,H=innerHeight;
+canvas.width=W; canvas.height=H;
+addEventListener('resize',()=>{ W=innerWidth; H=innerHeight; canvas.width=W; canvas.height=H; });
+
+// ══════════════════════════════════════════
+//  FPSキャップ付きレンダーループ
+// ══════════════════════════════════════════
+let lastFrameTime=0;
+function renderLoop(now){
+  requestAnimationFrame(renderLoop);
+  if(now-lastFrameTime < 1000/cfg.targetFps-1) return;
+  lastFrameTime=now; render(now);
+}
+requestAnimationFrame(renderLoop);
+
+// ══════════════════════════════════════════
+//  アニメ計算
+// ══════════════════════════════════════════
+function breathScaleY(now){
+  const t=(1-Math.cos((now/1000)*(Math.PI*2/cfg.breathPeriod)))/2;
+  return 1.0-t*cfg.breathAmp*6;
+}
+function bounceOffsetY(now){
+  if(!S.talking&&!S.shouting) return 0;
+  const amp=S.shouting?cfg.bounceAmp*1.5:cfg.bounceAmp;
+  return -Math.abs(Math.sin((now/cfg.bouncePeriod)*Math.PI))*amp;
+}
+
+// GIFループ揺らぎ：複数低周波サインで自然なゆらぎ
+function gifWobble(now,seed){
+  const a=cfg.gifWobbleAmp, p=cfg.gifWobblePeriod*1000;
+  return {
+    x: Math.sin((now/p)*Math.PI*2+seed)*a + Math.sin((now/(p*1.7))*Math.PI*2+seed*2.3)*a*0.4,
+    y: Math.sin((now/(p*1.3))*Math.PI*2+seed*1.1)*a + Math.sin((now/(p*0.8))*Math.PI*2+seed*3.1)*a*0.3,
+  };
+}
+
+// ══════════════════════════════════════════
+//  追従遅延バッファ
+// ══════════════════════════════════════════
+const delayBuf={torso:[],head:[],hand:[]};
+function pushBuf(key,val,now){
+  delayBuf[key].push({v:val,ts:now});
+  while(delayBuf[key].length>1&&delayBuf[key][0].ts<now-800) delayBuf[key].shift();
+}
+function readBuf(key,delayMs,fb){
+  if(delayMs<=0) return fb;
+  const buf=delayBuf[key]; if(!buf.length) return fb;
+  const t=performance.now()-delayMs;
+  for(let i=buf.length-1;i>=0;i--) if(buf[i].ts<=t) return buf[i].v;
+  return buf[0].v;
+}
+
+// ══════════════════════════════════════════
+//  描画ヘルパー（下端固定scaleY）
+// ══════════════════════════════════════════
+function hasAnyImage(){
+  return Object.values(BASE).some(g=>Object.values(g).some(v=>v?.complete&&v?.naturalWidth>0));
+}
+function drawBreath(src,cx,cy,sY,offY,wb){
+  if(!src) return;
+  const iw=src.naturalWidth||src.width, ih=src.naturalHeight||src.height;
+  if(!iw||!ih) return;
+  const sc=Math.min(W*0.92/iw,H*0.92/ih);
+  const dw=iw*sc,dh=ih*sc;
+  const bottom=cy+dh/2+(offY||0);
+  ctx.drawImage(src,cx-dw/2+(wb?.x||0),bottom-dh*sY+(wb?.y||0),dw,dh*sY);
+}
+function drawNormal(src,cx,cy){
+  if(!src) return;
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  if(!iw||!ih) return;
+  const sc=Math.min(W*0.92/iw,H*0.92/ih);
+  ctx.drawImage(src,cx-iw*sc/2,cy-ih*sc/2,iw*sc,ih*sc);
+}
+
+// ══════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════
+function render(now){
+  ctx.clearRect(0,0,W,H);
+  const cx=W/2,cy=H/2;
+  const sY=breathScaleY(now), bY=bounceOffsetY(now);
+  pushBuf('torso',{sY,bY},now); pushBuf('head',{sY,bY},now); pushBuf('hand',{sY,bY},now);
+  const tV=readBuf('torso',cfg.torsoFollowDelay,{sY,bY});
+  const hV=readBuf('head', cfg.headFollowDelay, {sY,bY});
+  const handV=readBuf('hand',cfg.handFollowDelay,{sY,bY});
+
+  if(!hasAnyImage()){ drawDemo(now,cx,cy,sY,bY); return; }
+
+  // 背景（揺らぎ・追従なし）
+  const bgImg=resolveLayer('bg','default');
+  if(bgImg) drawBreath(bgImg,cx,cy,1,0,gifWobble(now,7.1));
+
+  // 胴体
+  const torsoImg=resolveLayer('body_torso','default');
+  if(torsoImg) drawBreath(torsoImg,cx,cy,tV.sY,tV.bY,gifWobble(now,1.0));
+
+  // 手
+  const rImg=S.isMouseActive?(resolveLayer('hand_r','mouse')||resolveLayer('hand_r','default')):resolveLayer('hand_r','default');
+  const lImg=S.isKbActive?(resolveLayer('hand_l','keyboard')||resolveLayer('hand_l','default')):resolveLayer('hand_l','default');
+  if(cfg.handFollowDelay<0){
+    if(rImg) drawNormal(rImg,cx,cy);
+    if(lImg) drawNormal(lImg,cx,cy);
+  } else {
+    const hw=gifWobble(now,3.3);
+    if(rImg) drawBreath(rImg,cx,cy,handV.sY,handV.bY,hw);
+    if(lImg) drawBreath(lImg,cx,cy,handV.sY,handV.bY,hw);
+  }
+
+  // アクセサリ
+  const exImg=resolveLayer('extra','default');
+  if(exImg) drawBreath(exImg,cx,cy,tV.sY,tV.bY,gifWobble(now,5.5));
+
+  // 口
+  let mImg=resolveLayer('mouth','closed');
+  if(S.shouting) mImg=resolveLayer('mouth','shout')||resolveLayer('mouth','open');
+  else if(S.talking) mImg=resolveLayer('mouth','open');
+  if(mImg) drawBreath(mImg,cx,cy,hV.sY,hV.bY,gifWobble(now,2.1));
+
+  // 目（GIFモード対応）
+  let eyeSrc=null;
+  if(cfg.blinkMode==='gif'&&GifPlayer.isPlaying()) eyeSrc=GifPlayer.getCanvas();
+  else { const k=S.blinkFrame===2?'closed':S.blinkFrame===1?'half':'open'; eyeSrc=resolveLayer('eyes',k)||resolveLayer('eyes','open'); }
+  if(eyeSrc) drawBreath(eyeSrc,cx,cy,hV.sY,hV.bY,gifWobble(now,2.1));
+
+  // 頭部
+  const headImg=resolveLayer('body_head','default');
+  if(headImg) drawBreath(headImg,cx,cy,hV.sY,hV.bY,gifWobble(now,2.1));
+
+  // 前景
+  const fgImg=resolveLayer('fg','default');
+  if(fgImg) drawBreath(fgImg,cx,cy,1,0,gifWobble(now,9.9));
+}
+
+// ══════════════════════════════════════════
+//  DEMO DRAW
+// ══════════════════════════════════════════
+function drawDemo(now,cx,cy,sY,bY){
+  const r=Math.min(W,H)*0.22;
+  ctx.save();
+  ctx.translate(cx,cy+r*1.4+bY); ctx.scale(1,sY); ctx.translate(0,-r*1.4);
+  // 体
+  const bg2=ctx.createRadialGradient(0,r*.8,r*.1,0,r*.8,r*1.2);
+  bg2.addColorStop(0,'#5b21b6'); bg2.addColorStop(1,'#3b0764');
+  ctx.fillStyle=bg2; ctx.beginPath(); ctx.ellipse(0,r*.82,r*.68,r*.52,0,0,Math.PI*2); ctx.fill();
+  // 右手
+  const rCol=S.isMouseActive?'#f9a8d4':'#ddd6fe';
+  ctx.fillStyle=rCol; ctx.beginPath(); ctx.ellipse(r*.78,r*.65,r*.16,r*.2,0.3,0,Math.PI*2); ctx.fill();
+  if(S.isMouseActive){
+    ctx.fillStyle='#1e1b4b'; ctx.strokeStyle=rCol; ctx.lineWidth=r*.02;
+    ctx.beginPath(); ctx.ellipse(r*.78,r*.62,r*.1,r*.14,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle='rgba(249,168,212,.5)'; ctx.lineWidth=r*.015;
+    ctx.beginPath(); ctx.moveTo(r*.78,r*.55); ctx.lineTo(r*.78,r*.69); ctx.stroke();
+  }
+  // 左手
+  const lCol=S.isKbActive?'#93c5fd':'#ddd6fe';
+  ctx.fillStyle=lCol; ctx.beginPath(); ctx.ellipse(-r*.78,r*.65,r*.16,r*.2,-0.3,0,Math.PI*2); ctx.fill();
+  if(S.isKbActive){
+    ctx.fillStyle='#1e1b4b'; ctx.strokeStyle=lCol; ctx.lineWidth=r*.02;
+    ctx.beginPath(); roundRect(ctx,-r*.9,r*.6,r*.25,r*.16,r*.03); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=lCol;
+    for(let ri=0;ri<2;ri++) for(let ci=0;ci<3;ci++){ ctx.beginPath(); ctx.rect(-r*.87+ci*r*.07,r*.63+ri*r*.05,r*.04,r*.03); ctx.fill(); }
+  }
+  // 頭
+  const hg=ctx.createRadialGradient(-r*.1,-r*.1,r*.05,-r*.1,-r*.1,r);
+  hg.addColorStop(0,'#f0e6ff'); hg.addColorStop(1,'#c4b5fd');
+  ctx.fillStyle=hg; ctx.beginPath(); ctx.ellipse(0,0,r*.84,r*.88,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ddd6fe';
+  ctx.beginPath(); ctx.ellipse(-r*.86,r*.05,r*.14,r*.2,-0.15,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(r*.86,r*.05,r*.14,r*.2,0.15,0,Math.PI*2); ctx.fill();
+  // 目
+  const ey=-r*.08,lx=-r*.32,rx=r*.32;
+  if(S.blinkFrame===2){
+    ctx.strokeStyle='#1e1b4b'; ctx.lineWidth=r*.025;
+    ctx.beginPath(); ctx.moveTo(lx-r*.14,ey); ctx.quadraticCurveTo(lx,ey+r*.09,lx+r*.14,ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(rx-r*.14,ey); ctx.quadraticCurveTo(rx,ey+r*.09,rx+r*.14,ey); ctx.stroke();
+  } else if(S.blinkFrame===1){
+    ctx.fillStyle='#1e1b4b';
+    ctx.beginPath(); ctx.ellipse(lx,ey,r*.12,r*.07,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rx,ey,r*.12,r*.07,0,0,Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle='#1e1b4b';
+    ctx.beginPath(); ctx.ellipse(lx,ey,r*.12,r*.13,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rx,ey,r*.12,r*.13,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#7c3aed';
+    ctx.beginPath(); ctx.arc(lx+r*.02,ey-r*.02,r*.055,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rx+r*.02,ey-r*.02,r*.055,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='white';
+    ctx.beginPath(); ctx.arc(lx+r*.055,ey-r*.055,r*.028,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rx+r*.055,ey-r*.055,r*.028,0,Math.PI*2); ctx.fill();
+  }
+  // 差分インジケーター
+  if(activeVariant>=0){
+    ctx.fillStyle='rgba(124,58,237,.7)'; roundRect(ctx,-r*.6,r*.55,r*1.2,r*.25,r*.05); ctx.fill();
+    ctx.fillStyle='white'; ctx.font=`bold ${r*.1}px 'Segoe UI'`;
+    ctx.textAlign='center'; ctx.fillText(variants[activeVariant].label,0,r*.69); ctx.textAlign='left';
+  }
+  // 口
+  const my=r*.42;
+  if(S.shouting){
+    ctx.fillStyle='#1e1b4b'; ctx.beginPath(); ctx.ellipse(0,my,r*.22,r*.18,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#6d28d9'; ctx.beginPath(); ctx.ellipse(0,my+r*.02,r*.14,r*.1,0,0,Math.PI*2); ctx.fill();
+  } else if(S.talking){
+    ctx.fillStyle='#1e1b4b'; ctx.beginPath(); ctx.ellipse(0,my,r*.18,r*.11,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ec4899'; ctx.beginPath(); ctx.ellipse(0,my+r*.02,r*.1,r*.06,0,0,Math.PI*2); ctx.fill();
+  } else {
+    ctx.strokeStyle='#1e1b4b'; ctx.lineWidth=r*.025;
+    ctx.beginPath(); ctx.moveTo(-r*.2,my); ctx.quadraticCurveTo(0,my+r*.14,r*.2,my); ctx.stroke();
+    ctx.fillStyle='rgba(249,168,212,.45)'; ctx.beginPath(); ctx.ellipse(0,my+r*.06,r*.15,r*.06,0,0,Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle='rgba(249,168,212,.38)';
+  ctx.beginPath(); ctx.ellipse(-r*.5,r*.28,r*.19,r*.11,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(r*.5,r*.28,r*.19,r*.11,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function roundRect(ctx,x,y,w,h,r2){
+  ctx.beginPath(); ctx.moveTo(x+r2,y); ctx.lineTo(x+w-r2,y);
+  ctx.arcTo(x+w,y,x+w,y+r2,r2); ctx.lineTo(x+w,y+h-r2);
+  ctx.arcTo(x+w,y+h,x+w-r2,y+h,r2); ctx.lineTo(x+r2,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r2,r2); ctx.lineTo(x,y+r2);
+  ctx.arcTo(x,y,x+r2,y,r2); ctx.closePath();
+}
+
+// ══════════════════════════════════════════
+//  AUDIO
+// ══════════════════════════════════════════
+let analyser,dataArr,mouthTimer;
+async function initAudio(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    const ac=new AudioContext();
+    analyser=ac.createAnalyser(); analyser.fftSize=256;
+    dataArr=new Uint8Array(analyser.frequencyBinCount);
+    ac.createMediaStreamSource(stream).connect(analyser);
+    document.getElementById('mic-dot').classList.add('on');
+    tickAudio();
+  }catch(e){ console.warn('mic:',e); }
+}
+function tickAudio(){
+  requestAnimationFrame(tickAudio);
+  if(!analyser) return;
+  analyser.getByteFrequencyData(dataArr);
+  const avg=dataArr.slice(0,60).reduce((a,b)=>a+b,0)/60;
+  document.getElementById('mic-fill').style.width=Math.min(avg*1.5,100)+'%';
+  document.querySelectorAll('.vbar').forEach((b,i)=>{ b.style.height=(dataArr[i*4+2]/255*16+2)+'px'; });
+  if(avg>=cfg.audioShout){ S.shouting=true; S.talking=true; }
+  else if(avg>=cfg.audioThreshold){ S.shouting=false; S.talking=true; }
+  else{ S.shouting=false; if(S.talking){ clearTimeout(mouthTimer); mouthTimer=setTimeout(()=>{ S.talking=false; },cfg.mouthCloseDelay); } }
+}
+initAudio();
+const vvis=document.getElementById('vvis');
+for(let i=0;i<7;i++){const d=document.createElement('div');d.className='vbar';vvis.appendChild(d);}
+
+// ══════════════════════════════════════════
+//  BLINK（GIFモード対応）
+// ══════════════════════════════════════════
+let blinkTimer;
+function scheduleBlink(){
+  const j=(Math.random()*2-1)*cfg.blinkInterval*cfg.blinkJitter;
+  blinkTimer=setTimeout(doBlink,(cfg.blinkInterval+j)*1000);
+}
+function doBlink(){
+  if(cfg.blinkMode==='gif'&&GifPlayer.isReady()){ GifPlayer.play(()=>scheduleBlink()); return; }
+  const f=cfg.blinkFrameMs;
+  if(cfg.blinkMode==='3'){
+    S.blinkFrame=1;
+    setTimeout(()=>{ S.blinkFrame=2; setTimeout(()=>{ S.blinkFrame=1; setTimeout(()=>{ S.blinkFrame=0; scheduleBlink(); },f); },f*1.2); },f*.8);
+  } else { S.blinkFrame=2; setTimeout(()=>{ S.blinkFrame=0; scheduleBlink(); },f*2); }
+}
+scheduleBlink();
+
+// ══════════════════════════════════════════
+//  INPUT WATCHER
+// ══════════════════════════════════════════
+let kbTimer,msTimer;
+function updateInput(){
+  document.getElementById('status-rhand').textContent=S.isMouseActive?'マウス使用中 🖱️':'通常';
+  document.getElementById('status-lhand').textContent=S.isKbActive?'KB使用中 ⌨️':'通常';
+  const both=S.isMouseActive&&S.isKbActive;
+  document.getElementById('status-both').textContent=both?'両手使用中 ✓':'–';
+  document.getElementById('input-status').textContent=both?'⌨️🖱️':S.isMouseActive?'🖱️':S.isKbActive?'⌨️':'–';
+}
+document.addEventListener('keydown',e=>{
+  S.isKbActive=true; clearTimeout(kbTimer);
+  kbTimer=setTimeout(()=>{ S.isKbActive=false; updateInput(); },cfg.keyboardMs);
+  updateInput();
+  if(document.getElementById('panel').classList.contains('open')) return;
+  if(e.key==='s'||e.key==='S'){ openPanel(); return; }
+  const n=parseInt(e.key);
+  if(n>=1&&n<=8){ setVariant(activeVariant===n-1?-1:n-1); return; }
+  if(e.key==='0'){ setVariant(-1); return; }
+});
+['mousemove','mousedown'].forEach(ev=>{
+  document.addEventListener(ev,()=>{
+    S.isMouseActive=true; clearTimeout(msTimer);
+    msTimer=setTimeout(()=>{ S.isMouseActive=false; updateInput(); },cfg.mouseMs);
+    updateInput();
+  });
+});
+
+// ══════════════════════════════════════════
+//  VARIANT管理
+// ══════════════════════════════════════════
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('expr-toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+function setVariant(idx){
+  activeVariant=idx;
+  showToast(idx>=0?variants[idx].label:'ベース');
+  document.querySelectorAll('.variant-header').forEach((h,i)=>{
+    h.querySelector('.variant-active-badge')?.classList.toggle('show',i===idx);
+  });
+}
+function buildVariantList(){
+  const list=document.getElementById('variant-list'); list.innerHTML='';
+  variants.forEach((v,vi)=>{
+    const card=document.createElement('div'); card.className='variant-card';
+    const hdr=document.createElement('div'); hdr.className='variant-header';
+    hdr.innerHTML=`
+      <div class="variant-key">${vi+1}</div>
+      <input class="variant-name-input" type="text" value="${v.label}"
+        onclick="event.stopPropagation()" oninput="variants[${vi}].label=this.value">
+      <div class="variant-active-badge ${activeVariant===vi?'show':''}">● ACTIVE</div>
+      <button class="btn-ghost btn-sm" onclick="event.stopPropagation();setVariant(${vi})">適用</button>
+      <button class="btn-ghost btn-sm" onclick="event.stopPropagation();setVariant(-1)" style="opacity:.6">解除</button>`;
+    const body=document.createElement('div');
+    body.className='variant-body'+(v.open?' open':'');
+    hdr.addEventListener('click',()=>{ v.open=!v.open; body.classList.toggle('open',v.open); });
+    const note=document.createElement('p');
+    note.style.cssText='font-size:10px;color:#6b7280;margin-bottom:10px;line-height:1.5';
+    note.textContent='差し替えたいレイヤーだけ登録。未登録はベースのまま。';
+    body.appendChild(note);
+    const grid=document.createElement('div'); grid.className='patch-grid';
+    PATCHABLE.forEach(p=>{
+      const row=document.createElement('div'); row.className='patch-row';
+      const hp=!!v.patches[p.id]?.img;
+      row.innerHTML=`<label>${p.label}</label>
+        <input type="file" accept="image/*,.gif" onchange="setPatch(${vi},'${p.id}','${p.layer}','${p.state}',this)">
+        <img class="patch-thumb ${hp?'has':''}" id="pt-${vi}-${p.id}" ${hp?`src="${v.patches[p.id].src}"`:''}> 
+        <button class="patch-clear" onclick="clearPatch(${vi},'${p.id}')">✕</button>`;
+      grid.appendChild(row);
+    });
+    body.appendChild(grid); card.appendChild(hdr); card.appendChild(body); list.appendChild(card);
+  });
+}
+function setPatch(vi,pid,layer,state,input){
+  const file=input.files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  const img=new Image(); img.src=url;
+  const fr=new FileReader();
+  fr.onload=e=>{ variants[vi].patches[pid]={img,src:e.target.result}; };
+  fr.readAsDataURL(file);
+  variants[vi].patches[pid]={img,src:url}; // 即時表示用
+  const th=document.getElementById(`pt-${vi}-${pid}`);
+  if(th){ th.src=url; th.classList.add('has'); }
+}
+function clearPatch(vi,pid){
+  variants[vi].patches[pid]=null;
+  const th=document.getElementById(`pt-${vi}-${pid}`);
+  if(th){ th.src=''; th.classList.remove('has'); }
+}
+
+// ══════════════════════════════════════════
+//  プロジェクト保存 / 読込
+// ══════════════════════════════════════════
+function exportProject(){
+  showToast('保存中…');
+  // BASE_SRCSはすでにDataURL
+  const proj={
+    version:'0.4', cfg:{...cfg},
+    baseImages: {...BASE_SRCS},
+    variants: variants.map(v=>({
+      label:v.label,
+      patches: Object.fromEntries(
+        Object.entries(v.patches).filter(([,p])=>p?.src).map(([k,p])=>[k,{src:p.src}])
+      ),
+    })),
+  };
+  const blob=new Blob([JSON.stringify(proj,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='richpngtuber-project.json'; a.click();
+  setTimeout(()=>showToast('💾 保存しました'),300);
+}
+
+function importProject(input){
+  const file=input.files[0]; if(!file) return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    try{
+      const proj=JSON.parse(e.target.result);
+      if(proj.cfg) Object.assign(cfg,proj.cfg);
+      // ベース画像復元
+      Object.entries(proj.baseImages||{}).forEach(([key,dataUrl])=>{
+        const [layer,state]=key.split('__');
+        if(!BASE[layer]) return;
+        const img=new Image(); img.src=dataUrl;
+        BASE[layer][state]=img; BASE_SRCS[key]=dataUrl;
+        const th=document.getElementById(`th-${layer}-${state}`);
+        if(th){ th.src=dataUrl; th.classList.add('has'); }
+        if(layer==='eyes'&&state==='blinkgif') GifPlayer.load(dataUrl).catch(()=>{});
+      });
+      // variant復元
+      (proj.variants||[]).forEach((sv,vi)=>{
+        if(!variants[vi]) return;
+        variants[vi].label=sv.label||variants[vi].label;
+        variants[vi].patches={};
+        Object.entries(sv.patches||{}).forEach(([pid,pd])=>{
+          if(!pd?.src) return;
+          const img=new Image(); img.src=pd.src;
+          variants[vi].patches[pid]={img,src:pd.src};
+        });
+      });
+      activeVariant=-1;
+      syncCfgToUI(); buildVariantList();
+      showToast('📂 読み込みました');
+    }catch(err){ alert('読み込みエラー: '+err.message); }
+  };
+  fr.readAsText(file);
+}
+
+function syncCfgToUI(){
+  const el=id=>document.getElementById(id);
+  const sv=(id,v)=>{ if(el(id)) el(id).value=v; };
+  const st=(id,v)=>{ if(el(id)) el(id).textContent=v; };
+  sv('aud-threshold',cfg.audioThreshold);  st('v-at',cfg.audioThreshold);
+  sv('aud-shout',cfg.audioShout);          st('v-as',cfg.audioShout);
+  sv('aud-delay',cfg.mouthCloseDelay);     st('v-ad',cfg.mouthCloseDelay);
+  sv('breath-amp',Math.round(cfg.breathAmp*1000)); st('v-ba',Math.round(cfg.breathAmp*1000));
+  sv('breath-period',Math.round(cfg.breathPeriod*10)); st('v-bp',cfg.breathPeriod.toFixed(1));
+  sv('bounce-amp',cfg.bounceAmp);          st('v-boa',cfg.bounceAmp);
+  sv('bounce-period',cfg.bouncePeriod);    st('v-bop',cfg.bouncePeriod);
+  sv('torso-delay',cfg.torsoFollowDelay);  st('v-td',cfg.torsoFollowDelay);
+  sv('head-delay',cfg.headFollowDelay);    st('v-hd2',cfg.headFollowDelay);
+  sv('hand-delay',cfg.handFollowDelay);    st('v-hd',cfg.handFollowDelay);
+  sv('blink-interval',cfg.blinkInterval);  st('v-bi',cfg.blinkInterval);
+  sv('blink-jitter',Math.round(cfg.blinkJitter*100)); st('v-bj',cfg.blinkJitter.toFixed(2));
+  sv('blink-frame',cfg.blinkFrameMs);      st('v-bf',cfg.blinkFrameMs);
+  sv('kb-timeout',cfg.keyboardMs);         st('v-kb',cfg.keyboardMs);
+  sv('ms-timeout',cfg.mouseMs);            st('v-ms',cfg.mouseMs);
+  if(el('blink-mode')) el('blink-mode').value=cfg.blinkMode;
+  setFps(cfg.targetFps);
+}
+
+// ══════════════════════════════════════════
+//  PANEL / TAB
+// ══════════════════════════════════════════
+document.getElementById('gear-btn').onclick=openPanel;
+function openPanel(){ buildVariantList(); document.getElementById('panel').classList.add('open'); }
+function closePanel(){ document.getElementById('panel').classList.remove('open'); }
+
+function setFps(v){
+  cfg.targetFps=v;
+  const sl=document.getElementById('fps-slider'), lb=document.getElementById('v-fps');
+  if(sl) sl.value=v; if(lb) lb.textContent=v+'fps';
+}
+
+const TAB_NAMES=['layers','variants','blink','audio','anim','input','project'];
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',TAB_NAMES[i]===name));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+name));
+  if(name==='variants') buildVariantList();
+}
+
+</script>
+</body>
+</html>
