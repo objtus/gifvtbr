@@ -475,11 +475,31 @@ stopAction(returnTo?)
 |---|---|---|
 | GET | `/variant/{index\|name\|next\|prev\|reset}` | 差分を切替（index/name は toggleVariant → stackMode 反映） |
 | GET | `/action/{index\|name\|stop}` | アクションをトリガー/停止 |
-| GET | `/status` | 現在の状態を JSON で返す |
+| GET | `/status` | 現在の状態を JSON で返す（`activeVariants`・`activeVariant`・`activeAction` を含む） |
 
 - `/variant/0` 等（数値・名前）は `toggleVariant` を呼ぶため stackMode ON 時はスタック操作になる
 - `/variant/next`・`/variant/prev`・`/variant/reset` は常に `setVariant` を呼ぶ
 - クエリパラメータ: `/action/0?loop=3&span=5000` でループ数・スパンを一時上書きできる
+
+#### `?set` パラメータ（冪等適用）
+
+`/variant/{index|name}` に `?set` を付けると、トグル（解除）をせず**適用のみ**を行う。
+
+| 状況 | `?set` なし（トグル） | `?set` あり（冪等適用） |
+|---|---|---|
+| 未適用 → アクセス | 適用 | 適用 |
+| 適用済み → アクセス | **解除** | **何もしない** |
+
+```
+GET /variant/smile          # 未適用なら適用、適用済みなら解除
+GET /variant/smile?set      # 未適用なら適用、適用済みなら何もしない
+```
+
+stackMode との組み合わせ:
+- stackMode OFF: 未適用なら `setVariant(idx)`（他の差分は置き換わる）
+- stackMode ON: スタックに含まれていなければ追加、含まれていれば何もしない
+
+> `?set` は `next`・`prev`・`reset` には適用されない（無視される）。
 
 ### 4-12. 入力検知
 

@@ -161,10 +161,31 @@
 
       <!-- 追加レイヤー -->
       <div class="section">
-        <div class="sec-title">✨ 追加レイヤー (extra / fg)</div>
-        <div class="row"><label>アクセサリ等</label>
-          <input type="file" accept="image/*,.gif" onchange="loadBase('extra','default',this)">
-          <img class="thumb" id="th-extra-default"></div>
+        <div class="sec-title">✨ 胴体アクセサリ（torso 追従）</div>
+        <div class="row"><label>胴体アクセサリ1</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_t1','default',this)">
+          <img class="thumb" id="th-extra_t1-default"></div>
+        <div class="row"><label>胴体アクセサリ2</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_t2','default',this)">
+          <img class="thumb" id="th-extra_t2-default"></div>
+        <div class="row"><label>胴体アクセサリ3</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_t3','default',this)">
+          <img class="thumb" id="th-extra_t3-default"></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">✨ 頭部アクセサリ（head 追従）</div>
+        <div class="row"><label>頭部アクセサリ1</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_h1','default',this)">
+          <img class="thumb" id="th-extra_h1-default"></div>
+        <div class="row"><label>頭部アクセサリ2</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_h2','default',this)">
+          <img class="thumb" id="th-extra_h2-default"></div>
+        <div class="row"><label>頭部アクセサリ3</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('extra_h3','default',this)">
+          <img class="thumb" id="th-extra_h3-default"></div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🎞️ 前景</div>
         <div class="row"><label>前景（最前面）</label>
           <input type="file" accept="image/*,.gif" onchange="loadBase('fg','default',this)">
           <img class="thumb" id="th-fg-default"></div>

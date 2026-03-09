@@ -204,7 +204,9 @@ const BASE = {
   hand_r:{default:null,mouse:null}, hand_l:{default:null,keyboard:null},
   eyes:{open:null,half:null,closed:null,blinkgif:null},
   mouth:{closed:null,small:null,open:null,wide:null,shout:null,sibilant:null,rounded:null},
-  extra:{default:null}, fg:{default:null},
+  extra_t1:{default:null}, extra_t2:{default:null}, extra_t3:{default:null},
+  extra_h1:{default:null}, extra_h2:{default:null}, extra_h3:{default:null},
+  fg:{default:null},
 };
 const BASE_SRCS = {}; // key="layer__state" → dataURL（保存用）
 
@@ -263,8 +265,13 @@ const PATCHABLE=[
   {id:'hand_r-mouse',      label:'右手_マウス', layer:'hand_r',    state:'mouse'},
   {id:'hand_l-default',    label:'左手_通常',   layer:'hand_l',    state:'default'},
   {id:'hand_l-keyboard',   label:'左手_KB',     layer:'hand_l',    state:'keyboard'},
-  {id:'extra-default',     label:'アクセサリ',  layer:'extra',     state:'default'},
-  {id:'fg-default',        label:'前景',        layer:'fg',        state:'default'},
+  {id:'extra_t1-default',  label:'胴体アクセサリ1', layer:'extra_t1', state:'default'},
+  {id:'extra_t2-default',  label:'胴体アクセサリ2', layer:'extra_t2', state:'default'},
+  {id:'extra_t3-default',  label:'胴体アクセサリ3', layer:'extra_t3', state:'default'},
+  {id:'extra_h1-default',  label:'頭部アクセサリ1', layer:'extra_h1', state:'default'},
+  {id:'extra_h2-default',  label:'頭部アクセサリ2', layer:'extra_h2', state:'default'},
+  {id:'extra_h3-default',  label:'頭部アクセサリ3', layer:'extra_h3', state:'default'},
+  {id:'fg-default',        label:'前景',            layer:'fg',       state:'default'},
 ];
 
 // ショートカットキーの表示ラベル（スロットインデックス対応）
@@ -297,7 +304,8 @@ function resolveLayer(layer,state){
 //  ワンショットアクション データ構造
 //  差分スロット（状態の維持）と独立した「イベントレーン」
 // ══════════════════════════════════════════
-const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','mouth','eyes','extra','fg'];
+const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','mouth','eyes',
+  'extra_t1','extra_t2','extra_t3','extra_h1','extra_h2','extra_h3','fg'];
 const ACTION_SLOT_COUNT=8;
 const actions=Array.from({length:ACTION_SLOT_COUNT},(_,i)=>({
   label:`アクション${i+1}`, loop:1, span:0, patches:{}
@@ -490,9 +498,21 @@ function render(now, animNow){
   }
   if(eyeSrc) drawBreath(eyeSrc,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
-  // アクセサリ（アクションオーバーライド優先）
-  const exImg=resolveActionLayer('extra')||resolveLayer('extra','default');
-  if(exImg) drawBreath(exImg,cx,cy,tV.sY,tV.bY,gifWobble(animNow,5.5));
+  // 胴体系アクセサリ（torso 追従）
+  const exT1=resolveActionLayer('extra_t1')||resolveLayer('extra_t1','default');
+  if(exT1) drawBreath(exT1,cx,cy,tV.sY,tV.bY,gifWobble(animNow,5.5));
+  const exT2=resolveActionLayer('extra_t2')||resolveLayer('extra_t2','default');
+  if(exT2) drawBreath(exT2,cx,cy,tV.sY,tV.bY,gifWobble(animNow,5.7));
+  const exT3=resolveActionLayer('extra_t3')||resolveLayer('extra_t3','default');
+  if(exT3) drawBreath(exT3,cx,cy,tV.sY,tV.bY,gifWobble(animNow,5.9));
+
+  // 頭部系アクセサリ（head 追従）
+  const exH1=resolveActionLayer('extra_h1')||resolveLayer('extra_h1','default');
+  if(exH1) drawBreath(exH1,cx,cy,hV.sY,hV.bY,gifWobble(animNow,6.1));
+  const exH2=resolveActionLayer('extra_h2')||resolveLayer('extra_h2','default');
+  if(exH2) drawBreath(exH2,cx,cy,hV.sY,hV.bY,gifWobble(animNow,6.3));
+  const exH3=resolveActionLayer('extra_h3')||resolveLayer('extra_h3','default');
+  if(exH3) drawBreath(exH3,cx,cy,hV.sY,hV.bY,gifWobble(animNow,6.5));
 
   // 前景（アクションオーバーライド優先）
   const fgImg=resolveActionLayer('fg')||resolveLayer('fg','default');
@@ -917,7 +937,10 @@ function clearPatch(vi,pid){
 // ══════════════════════════════════════════
 const ACTION_LAYER_LABELS={
   bg:'背景', body_torso:'ボディ(胴体)', body_head:'ボディ(頭部)',
-  hand_r:'右手', hand_l:'左手', eyes:'目', mouth:'口', extra:'アクセサリ', fg:'前景',
+  hand_r:'右手', hand_l:'左手', eyes:'目', mouth:'口',
+  extra_t1:'胴体アクセサリ1', extra_t2:'胴体アクセサリ2', extra_t3:'胴体アクセサリ3',
+  extra_h1:'頭部アクセサリ1', extra_h2:'頭部アクセサリ2', extra_h3:'頭部アクセサリ3',
+  fg:'前景',
 };
 const ACTION_LAYER_NOTES={
   hand_r:'マウス状態を無視', hand_l:'KB状態を無視',
@@ -1163,6 +1186,13 @@ function applyProject(proj){
     const t=proj.cfg.audioThreshold||5, s=proj.cfg.audioShout||30;
     cfg.lipsyncLevels=[0, t, Math.round((t*2+s)/3), Math.round((t+s*2)/3), s];
   }
+  // 旧プロジェクト（extra__default）から extra_t1__default へのマイグレーション
+  if(proj.baseImages?.['extra__default'] && !proj.baseImages?.['extra_t1__default'])
+    proj.baseImages['extra_t1__default']=proj.baseImages['extra__default'];
+  (proj.variants||[]).forEach(v=>{
+    if(v.patches?.['extra-default'] && !v.patches?.['extra_t1-default'])
+      v.patches['extra_t1-default']=v.patches['extra-default'];
+  });
   // ベース画像復元
   Object.entries(proj.baseImages||{}).forEach(([key,dataUrl])=>{
     const [layer,state]=key.split('__');
@@ -1421,20 +1451,31 @@ function switchTab(name){
         console.log('[LocalAPI renderer] prev →', prev);
         setVariant(prev);
       } else {
+        const useSet=!!cmd.params?.set;
         const n=parseInt(t);
+        let idx;
         if(!isNaN(n)){
-          const idx=n<0?-1:Math.min(n,VARIANT_SLOT_COUNT-1);
-          console.log('[LocalAPI renderer] toggleVariant by index →', idx, '(stackMode='+cfg.stackMode+')');
-          toggleVariant(idx);
+          idx=n<0?-1:Math.min(n,VARIANT_SLOT_COUNT-1);
         } else {
-          const idx=variants.findIndex(v=>v.label===t);
+          idx=variants.findIndex(v=>v.label===t);
           if(idx<0){
             console.warn('[LocalAPI renderer] variant name "'+t+'" not found. registered labels:',
               variants.map((v,i)=>`[${i}]"${v.label}"`).join(', '));
-          } else {
-            console.log('[LocalAPI renderer] toggleVariant by name "'+t+'" → idx:', idx, '(stackMode='+cfg.stackMode+')');
           }
-          if(idx>=0) toggleVariant(idx);
+        }
+        if(idx>=0){
+          if(useSet){
+            // ?set: 適用済みなら何もしない、未適用なら適用（トグル解除しない）
+            const alreadyActive=activeVariants.includes(idx);
+            console.log('[LocalAPI renderer] setVariant(set mode) idx='+idx+' alreadyActive='+alreadyActive+' stackMode='+cfg.stackMode);
+            if(!alreadyActive){
+              if(cfg.stackMode) toggleStackVariant(idx);  // スタックに追加
+              else              setVariant(idx);           // 単一適用
+            }
+          } else {
+            console.log('[LocalAPI renderer] toggleVariant idx='+idx+' stackMode='+cfg.stackMode);
+            toggleVariant(idx);
+          }
         }
       }
     } else if(cmd.type==='action'){

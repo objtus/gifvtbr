@@ -188,7 +188,8 @@ ipcMain.handle('start-local-api', (_event, port) => {
 
     let cmd = null;
     if (type === 'variant') {
-      cmd = { type: 'variant', target, params: {} };
+      const setMode = url.searchParams.has('set');
+      cmd = { type: 'variant', target, params: { set: setMode } };
     } else if (type === 'action') {
       const loop = url.searchParams.get('loop');
       const span = url.searchParams.get('span');
@@ -207,7 +208,7 @@ ipcMain.handle('start-local-api', (_event, port) => {
     console.log(`[LocalAPI] cmd built:`, JSON.stringify(cmd));
     if (cmd.type === 'status') {
       win.webContents.executeJavaScript(
-        'JSON.stringify({activeVariant,activeAction,isPlaying:activeAction>=0})'
+        'JSON.stringify({activeVariants,activeVariant:getActiveVariant(),activeAction,isPlaying:activeAction>=0})'
       ).then(json => {
         console.log(`[LocalAPI] status response:`, json);
         res.writeHead(200); res.end(json);
