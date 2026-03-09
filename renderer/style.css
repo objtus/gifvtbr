@@ -167,11 +167,12 @@ input[type=text]{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,
 #gear-btn:hover{background:rgba(255,255,255,.17)}
 
 /* トースト */
-#expr-toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.6);border:1px solid rgba(167,139,250,.35);
-  border-radius:20px;padding:4px 16px;color:#e2d9ff;font-size:11px;
-  letter-spacing:.07em;text-transform:uppercase;
-  opacity:0;transition:opacity .3s;pointer-events:none;z-index:600}
+#expr-toast{
+  background:rgba(0,0,0,.55);border:1px solid rgba(167,139,250,.3);
+  border-radius:10px;padding:2px 8px;color:#d4cafe;font-size:9px;
+  letter-spacing:.05em;white-space:nowrap;max-width:80px;
+  overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transition:opacity .3s;pointer-events:none;text-align:right}
 #expr-toast.show{opacity:1}
 
 /* インフォバナー */
