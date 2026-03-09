@@ -1437,17 +1437,17 @@ function switchTab(name){
         const n=parseInt(t);
         if(!isNaN(n)){
           const idx=n<0?-1:Math.min(n,VARIANT_SLOT_COUNT-1);
-          console.log('[LocalAPI renderer] setVariant by index →', idx);
-          setVariant(idx);
+          console.log('[LocalAPI renderer] toggleVariant by index →', idx, '(stackMode='+cfg.stackMode+')');
+          toggleVariant(idx);
         } else {
           const idx=variants.findIndex(v=>v.label===t);
           if(idx<0){
             console.warn('[LocalAPI renderer] variant name "'+t+'" not found. registered labels:',
               variants.map((v,i)=>`[${i}]"${v.label}"`).join(', '));
           } else {
-            console.log('[LocalAPI renderer] setVariant by name "'+t+'" → idx:', idx);
+            console.log('[LocalAPI renderer] toggleVariant by name "'+t+'" → idx:', idx, '(stackMode='+cfg.stackMode+')');
           }
-          if(idx>=0) setVariant(idx);
+          if(idx>=0) toggleVariant(idx);
         }
       }
     } else if(cmd.type==='action'){
