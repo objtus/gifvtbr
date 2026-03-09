@@ -6,6 +6,7 @@
 const cfg = {
   mouthCloseDelay:180, audioSmoothing:0.3,
   lipsyncLevels:[0,5,15,30,60], // [closed,small,open,wide,shout] の下限閾値（RMS %）
+  stackMode:false,               // 差分スタックモード（true=重ね合わせ、false=単一切替）
   bandSplit:false,               // 帯域分割モード（true=中域RMS主軸、false=全域RMS）
   sibilantThreshold:15,          // 歯擦音判定閾値（bandSplit有効時のみ）
   roundedThreshold:10,           // 丸口判定閾値（bandSplit有効時のみ）
@@ -272,14 +273,16 @@ const VARIANT_KEYS=['1','2','3','4','5','6','7','8','9','↑','←','→'];
 const VARIANT_SLOT_COUNT=12;
 
 const variants=Array.from({length:VARIANT_SLOT_COUNT},(_,i)=>({label:`差分${i+1}`,patches:{},open:false}));
-let activeVariant=-1;
+let activeVariants=[];  // スタック。末尾が最高優先度（単一モード時は最大1要素）
 
 function resolveLayer(layer,state){
-  if(activeVariant>=0){
-    const pid=`${layer}-${state}`;
-    const p=variants[activeVariant].patches[pid];
+  const pid=`${layer}-${state}`;
+  // activeVariants を末尾（高優先）から順に検索
+  for(let i=activeVariants.length-1;i>=0;i--){
+    const vi=activeVariants[i];
+    const p=variants[vi].patches[pid];
     if(p?.img){
-      const lp=GIF_LOOPERS[`patch-${activeVariant}-${pid}`];
+      const lp=GIF_LOOPERS[`patch-${vi}-${pid}`];
       if(lp?.isReady()) return lp.getCanvas();
       return p.img;
     }
@@ -294,13 +297,13 @@ function resolveLayer(layer,state){
 //  ワンショットアクション データ構造
 //  差分スロット（状態の維持）と独立した「イベントレーン」
 // ══════════════════════════════════════════
-const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','eyes','mouth','extra','fg'];
+const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','mouth','eyes','extra','fg'];
 const ACTION_SLOT_COUNT=8;
 const actions=Array.from({length:ACTION_SLOT_COUNT},(_,i)=>({
   label:`アクション${i+1}`, inheritVariant:-1, loop:1, span:0, patches:{}
 }));
 // patches キーはレイヤー名（'eyes' 等）。差分スロットの 'eyes-open' 形式と異なりステート問わず1枚固定
-let activeAction=-1, actionLoopCount=0, preActionVariant=-1, actionSpanTimer=null;
+let activeAction=-1, actionLoopCount=0, preActionVariants=[], actionSpanTimer=null;
 const ACTION_PLAYERS={}; // key: `${ai}-${layer}` → createActionPlayer インスタンス
 
 // アクション再生中に指定レイヤーの画像を返す（非アクティブ時は null）
@@ -450,7 +453,11 @@ function render(now, animNow){
   const torsoImg=resolveActionLayer('body_torso')||resolveLayer('body_torso','default');
   if(torsoImg) drawBreath(torsoImg,cx,cy,tV.sY,tV.bY,gifWobble(animNow,1.0));
 
-  // 手（アクション中はマウス・KB 状態を無視して1枚固定）
+  // 頭部（アクションオーバーライド優先）
+  const headImg=resolveActionLayer('body_head')||resolveLayer('body_head','default');
+  if(headImg) drawBreath(headImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
+
+  // 手（頭部の前面・アクション中はマウス・KB 状態を無視して1枚固定）
   const rAction=resolveActionLayer('hand_r');
   const lAction=resolveActionLayer('hand_l');
   const rImg=rAction||(S.isMouseActive?(resolveLayer('hand_r','mouse')||resolveLayer('hand_r','default')):resolveLayer('hand_r','default'));
@@ -463,10 +470,6 @@ function render(now, animNow){
     if(rImg) drawBreath(rImg,cx,cy,handV.sY,handV.bY,hw);
     if(lImg) drawBreath(lImg,cx,cy,handV.sY,handV.bY,hw);
   }
-
-  // 頭部（アクションオーバーライド優先）
-  const headImg=resolveActionLayer('body_head')||resolveLayer('body_head','default');
-  if(headImg) drawBreath(headImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
   // 口（アクション中はリップシンク停止・1枚固定）
   let mImg=resolveActionLayer('mouth');
@@ -554,10 +557,10 @@ function drawDemo(cx,cy,sY,bY){
     ctx.beginPath(); ctx.arc(rx+r*.055,ey-r*.055,r*.028,0,Math.PI*2); ctx.fill();
   }
   // 差分インジケーター
-  if(activeVariant>=0){
+  if(activeVariants.length>0){
     ctx.fillStyle='rgba(124,58,237,.7)'; roundRect(ctx,-r*.6,r*.55,r*1.2,r*.25,r*.05); ctx.fill();
     ctx.fillStyle='white'; ctx.font=`bold ${r*.1}px 'Segoe UI'`;
-    ctx.textAlign='center'; ctx.fillText(variants[activeVariant].label,0,r*.69); ctx.textAlign='left';
+    ctx.textAlign='center'; ctx.fillText(_stackLabel(),0,r*.69); ctx.textAlign='left';
   }
   // 口
   const my=r*.42;
@@ -795,9 +798,48 @@ document.addEventListener('keydown',e=>{
 // ══════════════════════════════════════════
 //  VARIANT管理
 // ══════════════════════════════════════════
+
+// スタックの最高優先度インデックスを返す（スタックが空なら -1）
+function getActiveVariant(){ return activeVariants.length>0 ? activeVariants[activeVariants.length-1] : -1; }
+
+// GIFまばたき：スタック上位から blinkgif がある差分を優先
+function _syncBlinkGif(){
+  if(cfg.blinkMode!=='gif') return;
+  for(let i=activeVariants.length-1;i>=0;i--){
+    const src=variants[activeVariants[i]].patches['eyes-blinkgif']?.src;
+    if(src){ GifPlayer.load(src).catch(()=>{}); return; }
+  }
+  const baseSrc=BASE_SRCS['eyes__blinkgif'];
+  if(baseSrc) GifPlayer.load(baseSrc).catch(()=>{});
+}
+
+// バッジ更新：スタックに含まれる全スロットにバッジを表示
+function _updateVariantBadges(){
+  document.querySelectorAll('.variant-header').forEach((h,i)=>{
+    h.querySelector('.variant-active-badge')?.classList.toggle('show',activeVariants.includes(i));
+  });
+}
+
+// トースト表示用ラベル
+function _stackLabel(){
+  if(!activeVariants.length) return 'ベース';
+  return activeVariants.map(i=>variants[i].label).join(' + ');
+}
+
 // 同じスロットを再度押したらベースに戻るトグル動作
 function toggleVariant(idx){
-  setVariant(activeVariant===idx?-1:idx);
+  if(cfg.stackMode) toggleStackVariant(idx);
+  else setVariant(getActiveVariant()===idx?-1:idx);
+}
+
+// スタックモード：スタックに追加 or 取り除く
+function toggleStackVariant(idx){
+  const pos=activeVariants.indexOf(idx);
+  if(pos>=0) activeVariants.splice(pos,1);
+  else       activeVariants.push(idx);
+  _syncBlinkGif();
+  _updateVariantBadges();
+  showToast(_stackLabel());
 }
 
 let toastTimer;
@@ -807,18 +849,10 @@ function showToast(msg){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
 }
 function setVariant(idx){
-  activeVariant=idx;
-  // GIFモードのまばたきは差分切替時に対応するまばたきGIFを再ロード
-  if(cfg.blinkMode==='gif'){
-    const varSrc=idx>=0 ? variants[idx].patches['eyes-blinkgif']?.src : null;
-    const baseSrc=BASE_SRCS['eyes__blinkgif'];
-    const src=varSrc||baseSrc;
-    if(src) GifPlayer.load(src).catch(()=>{});
-  }
-  showToast(idx>=0?variants[idx].label:'ベース');
-  document.querySelectorAll('.variant-header').forEach((h,i)=>{
-    h.querySelector('.variant-active-badge')?.classList.toggle('show',i===idx);
-  });
+  activeVariants = idx<0 ? [] : [idx];
+  _syncBlinkGif();
+  _updateVariantBadges();
+  showToast(_stackLabel());
 }
 function buildVariantList(){
   const list=document.getElementById('variant-list'); list.innerHTML='';
@@ -829,7 +863,7 @@ function buildVariantList(){
       <div class="variant-key" title="Ctrl+${VARIANT_KEYS[vi]}">${VARIANT_KEYS[vi]}</div>
       <input class="variant-name-input" type="text" value="${v.label}"
         onclick="event.stopPropagation()" oninput="variants[${vi}].label=this.value">
-      <div class="variant-active-badge ${activeVariant===vi?'show':''}">● ACTIVE</div>
+      <div class="variant-active-badge ${activeVariants.includes(vi)?'show':''}">● ACTIVE</div>
       <button class="btn-ghost btn-sm" onclick="event.stopPropagation();setVariant(${vi})">適用</button>
       <button class="btn-ghost btn-sm" onclick="event.stopPropagation();setVariant(-1)" style="opacity:.6">解除</button>`;
     const body=document.createElement('div');
@@ -863,7 +897,7 @@ function setPatch(vi,pid,layer,state,input){
   fr.onload=e=>{
     variants[vi].patches[pid]={img,src:e.target.result};
     // アクティブな差分のまばたきGIFが更新されたら GifPlayer に即反映
-    if(state==='blinkgif' && activeVariant===vi && cfg.blinkMode==='gif')
+    if(state==='blinkgif' && activeVariants.includes(vi) && cfg.blinkMode==='gif')
       GifPlayer.load(e.target.result).catch(()=>{});
   };
   fr.readAsDataURL(file);
@@ -1022,9 +1056,9 @@ function doActionLoop(){
 }
 
 function playAction(index){
-  const savedVariant=activeVariant;
-  if(activeAction>=0) stopAction(savedVariant);
-  preActionVariant=savedVariant;
+  const savedVariants=activeVariants.slice();
+  if(activeAction>=0) stopAction(savedVariants);
+  preActionVariants=savedVariants;
   activeAction=index;
   actionLoopCount=0;
   clearTimeout(blinkTimer);
@@ -1032,7 +1066,8 @@ function playAction(index){
   const patchCount=Object.keys(a.patches).length;
   console.log('[action] playAction: index='+index+' label="'+a.label+'" inherit='+a.inheritVariant
     +' loop='+a.loop+' span='+a.span+' patches='+patchCount);
-  if(a.inheritVariant!==activeVariant) activeVariant=a.inheritVariant;
+  // inheritVariant は単一適用（スタックは一時的に上書き）
+  activeVariants = a.inheritVariant<0 ? [] : [a.inheritVariant];
   updateActionBadges();
   doActionLoop();
 }
@@ -1041,13 +1076,22 @@ function stopAction(returnTo){
   clearTimeout(actionSpanTimer);
   actionSpanTimer=null;
   if(activeAction>=0){
-    console.log('[action] stopAction: activeAction='+activeAction+' returnTo='+returnTo);
+    console.log('[action] stopAction: activeAction='+activeAction+' returnTo='+JSON.stringify(returnTo));
     ACTION_LAYERS.forEach(l=>{ ACTION_PLAYERS[`${activeAction}-${l}`]?.stop(); });
   }
-  const prev=preActionVariant;
+  const prev=preActionVariants.slice();
   activeAction=-1;
   actionLoopCount=0;
-  setVariant(returnTo!==undefined?returnTo:prev);
+  // 配列で渡された場合はスタックごと復元
+  const restoreTo = returnTo!==undefined ? returnTo : prev;
+  if(Array.isArray(restoreTo)){
+    activeVariants = restoreTo.slice();
+    _syncBlinkGif();
+    _updateVariantBadges();
+    showToast(_stackLabel());
+  } else {
+    setVariant(restoreTo);
+  }
   updateActionBadges();
   scheduleBlink();
 }
@@ -1182,7 +1226,7 @@ function applyProject(proj){
       }
     });
   });
-  activeVariant=-1;
+  activeVariants=[];
   activeAction=-1;
   syncCfgToUI(); buildVariantList(); buildActionList();
   showToast('📂 読み込みました');
@@ -1217,6 +1261,8 @@ function syncCfgToUI(){
   sv('response-fps',cfg.responseFps); st('v-rfps',cfg.responseFps+'fps');
   sv('wobble-amp',Math.round(cfg.gifWobbleAmp*10));   st('v-wa',cfg.gifWobbleAmp.toFixed(1));
   sv('wobble-period',Math.round(cfg.gifWobblePeriod*10)); st('v-wp',cfg.gifWobblePeriod.toFixed(1));
+  // スタックモード
+  if(el('stack-mode')) el('stack-mode').checked=!!cfg.stackMode;
   // ローカルAPI
   if(el('local-api-enabled')) el('local-api-enabled').checked=!!cfg.localApiEnabled;
   sv('local-api-port',cfg.localApiPort);
@@ -1378,11 +1424,13 @@ function switchTab(name){
         console.log('[LocalAPI renderer] setVariant(-1)');
         setVariant(-1);
       } else if(t==='next'){
-        const next=activeVariant<VARIANT_SLOT_COUNT-1?activeVariant+1:0;
+        const cur=getActiveVariant();
+        const next=cur<VARIANT_SLOT_COUNT-1?cur+1:0;
         console.log('[LocalAPI renderer] next →', next);
         setVariant(next);
       } else if(t==='prev'){
-        const prev=activeVariant<=0?VARIANT_SLOT_COUNT-1:activeVariant-1;
+        const cur=getActiveVariant();
+        const prev=cur<=0?VARIANT_SLOT_COUNT-1:cur-1;
         console.log('[LocalAPI renderer] prev →', prev);
         setVariant(prev);
       } else {
