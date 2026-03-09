@@ -36,6 +36,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveLastProject: (jsonStr) => ipcRenderer.invoke('save-last-project', jsonStr),
   loadLastProject: () => ipcRenderer.invoke('load-last-project'),
 
+  // ローカルAPI 制御
+  startLocalApi: (port) => ipcRenderer.invoke('start-local-api', port),
+  stopLocalApi:  () => ipcRenderer.invoke('stop-local-api'),
+  onLocalApiCommand: (callback) => {
+    ipcRenderer.on('local-api-command', (_event, cmd) => callback(cmd));
+  },
+
   // GIF デコード（ArrayBuffer → フレーム配列）
   // data: URL は renderer 側で ArrayBuffer に変換してから渡す
   decodeGif: (buffer) => {

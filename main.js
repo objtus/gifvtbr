@@ -6,6 +6,7 @@ const fs = require('fs');
 
 let win;
 let uIOhook;
+let localApiServer = null;
 
 // ══════════════════════════════════════════
 //  永続化ユーティリティ（userData フォルダへ保存）
@@ -151,7 +152,7 @@ function startGlobalHotkey() {
     // キーボード: keycode と Ctrl 修飾キーをレンダラーに送信
     uIOhook.on('keydown', (e) => {
       if (win && !win.isDestroyed()) {
-        win.webContents.send('global-keydown', { keycode: e.keycode, ctrlKey: e.ctrlKey });
+        win.webContents.send('global-keydown', { keycode: e.keycode, ctrlKey: e.ctrlKey, altKey: e.altKey });
       }
     });
 
@@ -172,6 +173,68 @@ function startGlobalHotkey() {
 }
 
 // ══════════════════════════════════════════
+//  ローカルAPI（localhost HTTP サーバー）
+//  Node.js 標準 http のみ使用（express 不要）
+// ══════════════════════════════════════════
+ipcMain.handle('start-local-api', (_event, port) => {
+  stopLocalApi();
+  const http = require('http');
+  localApiServer = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://localhost:${port}`);
+    const segments = url.pathname.replace(/^\//, '').split('/');
+    const type = segments[0];
+    const target = segments[1];
+    console.log(`[LocalAPI] ${req.method} ${req.url}  →  type="${type}" target="${target}"`);
+
+    let cmd = null;
+    if (type === 'variant') {
+      cmd = { type: 'variant', target, params: {} };
+    } else if (type === 'action') {
+      const loop = url.searchParams.get('loop');
+      const span = url.searchParams.get('span');
+      cmd = { type: 'action', target,
+        params: { loop: loop!=null?parseInt(loop):undefined, span: span!=null?parseInt(span):undefined } };
+    } else if (type === 'status') {
+      cmd = { type: 'status' };
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'application/json');
+    if (!cmd) {
+      console.warn(`[LocalAPI] 404: unknown type "${type}"`);
+      res.writeHead(404); res.end(JSON.stringify({ok:false,error:'not found'})); return;
+    }
+    console.log(`[LocalAPI] cmd built:`, JSON.stringify(cmd));
+    if (cmd.type === 'status') {
+      win.webContents.executeJavaScript(
+        'JSON.stringify({activeVariant,activeAction,isPlaying:activeAction>=0})'
+      ).then(json => {
+        console.log(`[LocalAPI] status response:`, json);
+        res.writeHead(200); res.end(json);
+      }).catch((e) => {
+        console.warn(`[LocalAPI] status error:`, e);
+        res.writeHead(500); res.end(JSON.stringify({ok:false}));
+      });
+    } else {
+      console.log(`[LocalAPI] sending IPC "local-api-command"`, JSON.stringify(cmd));
+      win.webContents.send('local-api-command', cmd);
+      res.writeHead(200); res.end(JSON.stringify({ok:true}));
+    }
+  });
+  localApiServer.on('error', (e) => console.error('[LocalAPI] server error:', e.message));
+  localApiServer.listen(port, '127.0.0.1', () => {
+    console.log(`[LocalAPI] listening on http://127.0.0.1:${port}`);
+  });
+  return { ok: true };
+});
+
+ipcMain.handle('stop-local-api', () => { stopLocalApi(); return { ok: true }; });
+
+function stopLocalApi() {
+  if (localApiServer) { try { localApiServer.close(); } catch (_) {} localApiServer = null; }
+}
+
+// ══════════════════════════════════════════
 //  アプリライフサイクル
 // ══════════════════════════════════════════
 app.whenReady().then(() => {
@@ -184,8 +247,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (uIOhook) {
-    try { uIOhook.stop(); } catch (_) {}
-  }
+  if (uIOhook) { try { uIOhook.stop(); } catch (_) {} }
+  stopLocalApi();
   app.quit();
 });

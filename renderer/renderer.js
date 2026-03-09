@@ -9,6 +9,7 @@ const cfg = {
   bandSplit:false,               // 帯域分割モード（true=中域RMS主軸、false=全域RMS）
   sibilantThreshold:15,          // 歯擦音判定閾値（bandSplit有効時のみ）
   roundedThreshold:10,           // 丸口判定閾値（bandSplit有効時のみ）
+  localApiPort:3000, localApiEnabled:false,
   blinkMode:'2', blinkInterval:4, blinkJitter:.4, blinkFrameMs:50,
   breathAmp:.012, breathPeriod:3.5,
   bounceAmp:5, bouncePeriod:220,
@@ -65,6 +66,54 @@ const GifPlayer = (() => {
     isPlaying:()=>cursor>=0,
   };
 })();
+
+// ══════════════════════════════════════════
+//  アクション用単発再生エンジン（ワンショット各レイヤー用）
+//  GifPlayer と同一ロジックをファクトリ関数として分離
+//  各レイヤーに独立したインスタンスを持てる
+// ══════════════════════════════════════════
+function createActionPlayer(){
+  let frames=[], cursor=-1, frameTimer=null, canvas=null, offCtx=null;
+
+  async function load(url){
+    if(!window.electronAPI?.decodeGif) return;
+    let ab;
+    if(url.startsWith('data:')){
+      const b64=url.split(',')[1];
+      const bin=atob(b64);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      ab=bytes.buffer;
+    } else {
+      ab=await fetch(url).then(r=>r.arrayBuffer());
+    }
+    const result=window.electronAPI.decodeGif(ab);
+    canvas=document.createElement('canvas');
+    canvas.width=result.width; canvas.height=result.height;
+    offCtx=canvas.getContext('2d');
+    frames=result.frames; cursor=-1;
+  }
+
+  function play(onEnd){
+    if(!frames.length){ if(onEnd)onEnd(); return; }
+    clearTimeout(frameTimer); cursor=0; step(onEnd);
+  }
+  function step(onEnd){
+    if(cursor<0||cursor>=frames.length){ cursor=-1; if(onEnd)onEnd(); return; }
+    const f=frames[cursor];
+    if(f.disposalType>=2) offCtx.clearRect(0,0,canvas.width,canvas.height);
+    offCtx.putImageData(new ImageData(f.patch,f.dims.width,f.dims.height),f.dims.left,f.dims.top);
+    frameTimer=setTimeout(()=>{ cursor++; step(onEnd); }, f.delay||80);
+  }
+
+  return {
+    load, play,
+    stop(){ clearTimeout(frameTimer); cursor=-1; },
+    getCanvas(){ return (canvas&&cursor>=0)?canvas:null; },
+    isReady(){ return frames.length>0; },
+    isPlaying(){ return cursor>=0; },
+  };
+}
 
 // ══════════════════════════════════════════
 //  GIF ループ再生エンジン（ベースレイヤー・差分パッチ用）
@@ -242,6 +291,28 @@ function resolveLayer(layer,state){
 }
 
 // ══════════════════════════════════════════
+//  ワンショットアクション データ構造
+//  差分スロット（状態の維持）と独立した「イベントレーン」
+// ══════════════════════════════════════════
+const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','eyes','mouth','extra','fg'];
+const ACTION_SLOT_COUNT=8;
+const actions=Array.from({length:ACTION_SLOT_COUNT},(_,i)=>({
+  label:`アクション${i+1}`, inheritVariant:-1, loop:1, span:0, patches:{}
+}));
+// patches キーはレイヤー名（'eyes' 等）。差分スロットの 'eyes-open' 形式と異なりステート問わず1枚固定
+let activeAction=-1, actionLoopCount=0, preActionVariant=-1, actionSpanTimer=null;
+const ACTION_PLAYERS={}; // key: `${ai}-${layer}` → createActionPlayer インスタンス
+
+// アクション再生中に指定レイヤーの画像を返す（非アクティブ時は null）
+function resolveActionLayer(layer){
+  if(activeAction<0) return null;
+  const p=actions[activeAction].patches[layer];
+  if(!p?.img) return null;
+  const pl=ACTION_PLAYERS[`${activeAction}-${layer}`];
+  return pl?.getCanvas()||p.img;
+}
+
+// ══════════════════════════════════════════
 //  口レベル解決（5段階フォールバック付き）
 //  level: 0=closed 1=small 2=open 3=wide 4=shout
 //  未登録ステートは level を下げながらフォールバック
@@ -371,17 +442,19 @@ function render(now, animNow){
 
   if(!hasAnyImage()){ drawDemo(cx,cy,sY,bY); return; }
 
-  // 背景（揺らぎは animNow でコマ送り）
-  const bgImg=resolveLayer('bg','default');
+  // 背景（アクションオーバーライド優先）
+  const bgImg=resolveActionLayer('bg')||resolveLayer('bg','default');
   if(bgImg) drawBreath(bgImg,cx,cy,1,0,gifWobble(animNow,7.1));
 
-  // 胴体
-  const torsoImg=resolveLayer('body_torso','default');
+  // 胴体（アクションオーバーライド優先）
+  const torsoImg=resolveActionLayer('body_torso')||resolveLayer('body_torso','default');
   if(torsoImg) drawBreath(torsoImg,cx,cy,tV.sY,tV.bY,gifWobble(animNow,1.0));
 
-  // 手（入力ポーズは常に最新の状態を反映）
-  const rImg=S.isMouseActive?(resolveLayer('hand_r','mouse')||resolveLayer('hand_r','default')):resolveLayer('hand_r','default');
-  const lImg=S.isKbActive?(resolveLayer('hand_l','keyboard')||resolveLayer('hand_l','default')):resolveLayer('hand_l','default');
+  // 手（アクション中はマウス・KB 状態を無視して1枚固定）
+  const rAction=resolveActionLayer('hand_r');
+  const lAction=resolveActionLayer('hand_l');
+  const rImg=rAction||(S.isMouseActive?(resolveLayer('hand_r','mouse')||resolveLayer('hand_r','default')):resolveLayer('hand_r','default'));
+  const lImg=lAction||(S.isKbActive?(resolveLayer('hand_l','keyboard')||resolveLayer('hand_l','default')):resolveLayer('hand_l','default'));
   if(cfg.handFollowDelay<0){
     if(rImg) drawNormal(rImg,cx,cy);
     if(lImg) drawNormal(lImg,cx,cy);
@@ -391,30 +464,35 @@ function render(now, animNow){
     if(lImg) drawBreath(lImg,cx,cy,handV.sY,handV.bY,hw);
   }
 
-  // 頭部（口・目より先に描いて顔パーツが上に重なるようにする）
-  const headImg=resolveLayer('body_head','default');
+  // 頭部（アクションオーバーライド優先）
+  const headImg=resolveActionLayer('body_head')||resolveLayer('body_head','default');
   if(headImg) drawBreath(headImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
-  // 口（形状オーバーライド優先。未登録時は mouthLevel フォールバック）
-  let mImg=null;
-  if(cfg.bandSplit && S.mouthShape)
-    mImg=resolveLayer('mouth',S.mouthShape)||resolveMouth(S.mouthLevel);
-  else
-    mImg=resolveMouth(S.mouthLevel);
+  // 口（アクション中はリップシンク停止・1枚固定）
+  let mImg=resolveActionLayer('mouth');
+  if(!mImg){
+    if(cfg.bandSplit && S.mouthShape)
+      mImg=resolveLayer('mouth',S.mouthShape)||resolveMouth(S.mouthLevel);
+    else
+      mImg=resolveMouth(S.mouthLevel);
+  }
   if(mImg) drawBreath(mImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
-  // 目（まばたき状態は常に最新、GIF再生フレームも随時反映）
-  let eyeSrc=null;
-  if(cfg.blinkMode==='gif'&&GifPlayer.isPlaying()) eyeSrc=GifPlayer.getCanvas();
-  else { const k=S.blinkFrame===2?'closed':S.blinkFrame===1?'half':'open'; eyeSrc=resolveLayer('eyes',k)||resolveLayer('eyes','open'); }
+  // 目（アクション中はまばたき停止・1枚固定）
+  const eyeAction=resolveActionLayer('eyes');
+  let eyeSrc=eyeAction;
+  if(!eyeAction){
+    if(cfg.blinkMode==='gif'&&GifPlayer.isPlaying()) eyeSrc=GifPlayer.getCanvas();
+    else { const k=S.blinkFrame===2?'closed':S.blinkFrame===1?'half':'open'; eyeSrc=resolveLayer('eyes',k)||resolveLayer('eyes','open'); }
+  }
   if(eyeSrc) drawBreath(eyeSrc,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
-  // アクセサリ（目・口の上、前景の下）
-  const exImg=resolveLayer('extra','default');
+  // アクセサリ（アクションオーバーライド優先）
+  const exImg=resolveActionLayer('extra')||resolveLayer('extra','default');
   if(exImg) drawBreath(exImg,cx,cy,tV.sY,tV.bY,gifWobble(animNow,5.5));
 
-  // 前景
-  const fgImg=resolveLayer('fg','default');
+  // 前景（アクションオーバーライド優先）
+  const fgImg=resolveActionLayer('fg')||resolveLayer('fg','default');
   if(fgImg) drawBreath(fgImg,cx,cy,1,0,gifWobble(animNow,9.9));
 }
 
@@ -689,9 +767,15 @@ document.addEventListener('keydown',e=>{
   if(document.getElementById('panel').classList.contains('open')) return;
   // S: 設定パネルを開く（修飾キーなし）
   if(e.key==='s'||e.key==='S'){ openPanel(); return; }
-  // Ctrl+数字 / Ctrl+矢印: 差分スロット切替
   if(!e.ctrlKey) return;
   e.preventDefault();
+  // Ctrl+Alt+1〜8: ワンショットアクション
+  if(e.altKey){
+    const n=parseInt(e.key);
+    if(n>=1&&n<=8){ triggerAction(n-1); return; }
+    return;
+  }
+  // Ctrl+数字 / Ctrl+矢印: 差分スロット切替
   const n=parseInt(e.key);
   if(n>=1&&n<=9){ toggleVariant(n-1); return; }  // Ctrl+1〜9 → スロット0〜8
   if(e.key==='0'){ setVariant(-1); return; }       // Ctrl+0 → ベース
@@ -795,17 +879,209 @@ function clearPatch(vi,pid){
 }
 
 // ══════════════════════════════════════════
+//  ワンショットアクション UI 管理
+// ══════════════════════════════════════════
+const ACTION_LAYER_LABELS={
+  bg:'背景', body_torso:'ボディ(胴体)', body_head:'ボディ(頭部)',
+  hand_r:'右手', hand_l:'左手', eyes:'目', mouth:'口', extra:'アクセサリ', fg:'前景',
+};
+const ACTION_LAYER_NOTES={
+  hand_r:'マウス状態を無視', hand_l:'KB状態を無視',
+  eyes:'まばたき停止', mouth:'リップシンク停止',
+};
+
+function loadActionPatch(ai, layer, input){
+  const file=input.files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  const img=new Image(); img.src=url;
+  if(!actions[ai].patches[layer]) actions[ai].patches[layer]={};
+  actions[ai].patches[layer].img=img;
+  // GIF の場合はアクションプレイヤーを生成してロード
+  const key=`${ai}-${layer}`;
+  if(isGifFile(file)){
+    const pl=createActionPlayer();
+    ACTION_PLAYERS[key]=pl;
+    pl.load(url).catch(e=>console.warn('action player load:',e));
+  } else {
+    ACTION_PLAYERS[key]?.stop();
+    delete ACTION_PLAYERS[key];
+  }
+  const fr=new FileReader();
+  fr.onload=e=>{ actions[ai].patches[layer].src=e.target.result; };
+  fr.readAsDataURL(file);
+  const th=document.getElementById(`th-action-${ai}-${layer}`);
+  if(th){ th.src=url; th.classList.add('has'); }
+  setFileLoadedBadge(input);
+}
+
+function clearActionPatch(ai, layer){
+  delete actions[ai].patches[layer];
+  ACTION_PLAYERS[`${ai}-${layer}`]?.stop();
+  delete ACTION_PLAYERS[`${ai}-${layer}`];
+  const th=document.getElementById(`th-action-${ai}-${layer}`);
+  if(th){ th.src=''; th.classList.remove('has'); }
+}
+
+function buildActionList(){
+  const list=document.getElementById('action-list'); if(!list) return;
+  list.innerHTML='';
+  // 引き継ぎ元 select のオプション HTML
+  const inheritOptions=`<option value="-1">ベース</option>`+
+    variants.map((v,vi)=>`<option value="${vi}">${v.label||'差分'+(vi+1)}</option>`).join('');
+  actions.forEach((a,ai)=>{
+    const card=document.createElement('div'); card.className='variant-card';
+    const hdr=document.createElement('div'); hdr.className='variant-header';
+    hdr.innerHTML=`
+      <div class="variant-key" title="Ctrl+Alt+${ai+1}">${ai+1}</div>
+      <input class="variant-name-input" type="text" value="${a.label}"
+        onclick="event.stopPropagation()" oninput="actions[${ai}].label=this.value">
+      <div class="variant-active-badge action-active-badge ${activeAction===ai?'show':''}">● ACTIVE</div>
+      <button class="btn-ghost btn-sm" onclick="event.stopPropagation();triggerAction(${ai})">▶ テスト</button>
+      <button class="btn-ghost btn-sm" onclick="event.stopPropagation();stopAction()" style="opacity:.6">■ 停止</button>`;
+    const body=document.createElement('div');
+    body.className='variant-body'+(a.open?' open':'');
+    hdr.addEventListener('click',()=>{ a.open=!a.open; body.classList.toggle('open',a.open); });
+
+    // 設定行: 引き継ぎ元 / ループ / スパン
+    const cfg_row=document.createElement('div');
+    cfg_row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center;font-size:11px';
+    cfg_row.innerHTML=`
+      <label style="color:#94a3b8">引き継ぎ元:
+        <select style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;margin-left:4px"
+          onchange="actions[${ai}].inheritVariant=parseInt(this.value)">${inheritOptions}</select>
+      </label>
+      <label style="color:#94a3b8">ループ:
+        <input type="number" min="0" value="${a.loop}" style="width:48px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;margin-left:4px"
+          oninput="actions[${ai}].loop=parseInt(this.value)||0">
+        <span style="color:#64748b">回（0=∞）</span>
+      </label>
+      <label style="color:#94a3b8">スパン:
+        <input type="number" min="0" value="${a.span}" style="width:56px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;margin-left:4px"
+          oninput="actions[${ai}].span=parseInt(this.value)||0">
+        <span style="color:#64748b">ms</span>
+      </label>`;
+    // 引き継ぎ元の初期値を select に反映
+    const sel=cfg_row.querySelector('select');
+    if(sel) sel.value=a.inheritVariant;
+    body.appendChild(cfg_row);
+
+    // レイヤー行
+    const grid=document.createElement('div'); grid.className='patch-grid';
+    ACTION_LAYERS.forEach(layer=>{
+      const row=document.createElement('div'); row.className='patch-row';
+      const hp=!!a.patches[layer]?.img;
+      const note=ACTION_LAYER_NOTES[layer]?`<span style="font-size:10px;color:#64748b;margin-left:4px">※${ACTION_LAYER_NOTES[layer]}</span>`:'';
+      row.innerHTML=`<label>${ACTION_LAYER_LABELS[layer]}${note}</label>
+        <input type="file" accept="image/*,.gif" onchange="loadActionPatch(${ai},'${layer}',this)">
+        <img class="patch-thumb ${hp?'has':''}" id="th-action-${ai}-${layer}" ${hp?`src="${a.patches[layer].src}"`:''}> 
+        <button class="patch-clear" onclick="clearActionPatch(${ai},'${layer}')">✕</button>`;
+      grid.appendChild(row);
+    });
+    body.appendChild(grid);
+    card.appendChild(hdr); card.appendChild(body); list.appendChild(card);
+  });
+}
+
+// ══════════════════════════════════════════
+//  ワンショットアクション 再生制御
+// ══════════════════════════════════════════
+
+// GIF を持つレイヤーを全て同時再生し、全終了後に onComplete を呼ぶ
+// GIF なしレイヤーのみのアクション（静止画）は即完了とする
+function playActionOnce(ai, onComplete){
+  const action=actions[ai];
+  const gifLayers=ACTION_LAYERS.filter(l=>{
+    const p=action.patches[l];
+    return p?.img && isGifSrc(p.src||'');
+  });
+  if(!gifLayers.length){ onComplete(); return; }
+  let remaining=gifLayers.length;
+  gifLayers.forEach(layer=>{
+    const key=`${ai}-${layer}`;
+    const pl=ACTION_PLAYERS[key];
+    if(pl?.isReady()){
+      pl.play(()=>{ if(--remaining===0) onComplete(); });
+    } else {
+      if(--remaining===0) onComplete();
+    }
+  });
+}
+
+function doActionLoop(){
+  if(activeAction<0) return;
+  console.log('[action] doActionLoop: activeAction='+activeAction+' loopCount='+actionLoopCount);
+  playActionOnce(activeAction, ()=>{
+    if(activeAction<0) return;
+    actionLoopCount++;
+    const a=actions[activeAction];
+    const more=(a.loop===0)||(actionLoopCount<a.loop);
+    console.log('[action] loop complete: count='+actionLoopCount+'/'+a.loop+' more='+more+' span='+a.span);
+    if(more) actionSpanTimer=setTimeout(doActionLoop, a.span);
+    else stopAction();
+  });
+}
+
+function playAction(index){
+  const savedVariant=activeVariant;
+  if(activeAction>=0) stopAction(savedVariant);
+  preActionVariant=savedVariant;
+  activeAction=index;
+  actionLoopCount=0;
+  clearTimeout(blinkTimer);
+  const a=actions[index];
+  const patchCount=Object.keys(a.patches).length;
+  console.log('[action] playAction: index='+index+' label="'+a.label+'" inherit='+a.inheritVariant
+    +' loop='+a.loop+' span='+a.span+' patches='+patchCount);
+  if(a.inheritVariant!==activeVariant) activeVariant=a.inheritVariant;
+  updateActionBadges();
+  doActionLoop();
+}
+
+function stopAction(returnTo){
+  clearTimeout(actionSpanTimer);
+  actionSpanTimer=null;
+  if(activeAction>=0){
+    console.log('[action] stopAction: activeAction='+activeAction+' returnTo='+returnTo);
+    ACTION_LAYERS.forEach(l=>{ ACTION_PLAYERS[`${activeAction}-${l}`]?.stop(); });
+  }
+  const prev=preActionVariant;
+  activeAction=-1;
+  actionLoopCount=0;
+  setVariant(returnTo!==undefined?returnTo:prev);
+  updateActionBadges();
+  scheduleBlink();
+}
+
+// 同インデックスなら停止、別インデックスなら再生（差分スロットと同じトグル動作）
+function triggerAction(idx){
+  if(activeAction===idx) stopAction();
+  else playAction(idx);
+}
+
+function updateActionBadges(){
+  document.querySelectorAll('.action-active-badge').forEach((b,i)=>{
+    b.classList.toggle('show', i===activeAction);
+  });
+}
+
+// ══════════════════════════════════════════
 //  プロジェクト保存 / 読込
 // ══════════════════════════════════════════
 async function exportProject(){
   showToast('保存中…');
   const proj={
-    version:'0.4', cfg:{...cfg},
+    version:'0.6', cfg:{...cfg},
     baseImages: {...BASE_SRCS},
     variants: variants.map(v=>({
       label:v.label,
       patches: Object.fromEntries(
         Object.entries(v.patches).filter(([,p])=>p?.src).map(([k,p])=>[k,{src:p.src}])
+      ),
+    })),
+    actions: actions.map(a=>({
+      label:a.label, inheritVariant:a.inheritVariant, loop:a.loop, span:a.span,
+      patches: Object.fromEntries(
+        Object.entries(a.patches).filter(([,p])=>p?.src).map(([l,p])=>[l,{src:p.src}])
       ),
     })),
   };
@@ -887,8 +1163,28 @@ function applyProject(proj){
       else clearGifLooper(patchKey);
     });
   });
+  // アクション復元
+  (proj.actions||[]).forEach((pa,ai)=>{
+    if(!actions[ai]) return;
+    actions[ai].label=pa.label||actions[ai].label;
+    actions[ai].inheritVariant=pa.inheritVariant??-1;
+    actions[ai].loop=pa.loop??1;
+    actions[ai].span=pa.span??0;
+    actions[ai].patches={};
+    Object.entries(pa.patches||{}).forEach(([layer,pd])=>{
+      if(!pd?.src) return;
+      const img=new Image(); img.src=pd.src;
+      actions[ai].patches[layer]={img,src:pd.src};
+      if(isGifSrc(pd.src)){
+        const pl=createActionPlayer();
+        ACTION_PLAYERS[`${ai}-${layer}`]=pl;
+        pl.load(pd.src).catch(e=>console.warn('action restore:',e));
+      }
+    });
+  });
   activeVariant=-1;
-  syncCfgToUI(); buildVariantList();
+  activeAction=-1;
+  syncCfgToUI(); buildVariantList(); buildActionList();
   showToast('📂 読み込みました');
 }
 
@@ -921,6 +1217,31 @@ function syncCfgToUI(){
   sv('response-fps',cfg.responseFps); st('v-rfps',cfg.responseFps+'fps');
   sv('wobble-amp',Math.round(cfg.gifWobbleAmp*10));   st('v-wa',cfg.gifWobbleAmp.toFixed(1));
   sv('wobble-period',Math.round(cfg.gifWobblePeriod*10)); st('v-wp',cfg.gifWobblePeriod.toFixed(1));
+  // ローカルAPI
+  if(el('local-api-enabled')) el('local-api-enabled').checked=!!cfg.localApiEnabled;
+  sv('local-api-port',cfg.localApiPort);
+  updateLocalApiStatus();
+}
+
+function startOrRestartLocalApi(){
+  if(!window.electronAPI?.startLocalApi) return;
+  console.log('[LocalAPI] starting on port', cfg.localApiPort);
+  window.electronAPI.startLocalApi(cfg.localApiPort).then(r=>{
+    console.log('[LocalAPI] start result:', r);
+    updateLocalApiStatus();
+  });
+}
+function stopLocalApiRenderer(){
+  if(!window.electronAPI?.stopLocalApi) return;
+  window.electronAPI.stopLocalApi().then(()=>updateLocalApiStatus());
+}
+function updateLocalApiStatus(){
+  const dot=document.getElementById('local-api-status-dot');
+  const txt=document.getElementById('local-api-status-text');
+  if(!dot||!txt) return;
+  const on=!!cfg.localApiEnabled;
+  dot.style.color=on?'#4ade80':'#6b7280';
+  txt.textContent=on?`待機中 (port ${cfg.localApiPort})`:'停止中';
 }
 
 // ══════════════════════════════════════════
@@ -950,11 +1271,12 @@ function setAnimFps(v){
   if(sl) sl.value=v; if(lb) lb.textContent=v+'fps';
 }
 
-const TAB_NAMES=['layers','variants','blink','audio','anim','input','project'];
+const TAB_NAMES=['layers','variants','actions','blink','audio','anim','input','project'];
 function switchTab(name){
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',TAB_NAMES[i]===name));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+name));
   if(name==='variants') buildVariantList();
+  if(name==='actions')  buildActionList();
 }
 
 // ══════════════════════════════════════════
@@ -1017,6 +1339,13 @@ function switchTab(name){
     if(!e.ctrlKey) return;
     if(document.getElementById('panel').classList.contains('open')) return;
 
+    // Ctrl+Alt+1〜8: ワンショットアクション（keycodes 2〜9 = キー1〜8）
+    if(e.altKey){
+      const numSlot=NUM_MAP[e.keycode];
+      if(numSlot>=1&&numSlot<=8){ triggerAction(numSlot-1); return; }
+      return;
+    }
+
     const numSlot=NUM_MAP[e.keycode];
     if(numSlot!==undefined){
       if(numSlot===0) setVariant(-1);           // Ctrl+0 → ベース
@@ -1039,4 +1368,74 @@ function switchTab(name){
     msTimer=setTimeout(()=>{ S.isMouseActive=false; updateInput(); },cfg.mouseMs);
     updateInput();
   });
+
+  // ─── ローカルAPI コマンド受信 ───
+  window.electronAPI.onLocalApiCommand((cmd)=>{
+    console.log('[LocalAPI renderer] received cmd:', JSON.stringify(cmd));
+    if(cmd.type==='variant'){
+      const t=cmd.target;
+      if(t==='reset'||t==='-1'){
+        console.log('[LocalAPI renderer] setVariant(-1)');
+        setVariant(-1);
+      } else if(t==='next'){
+        const next=activeVariant<VARIANT_SLOT_COUNT-1?activeVariant+1:0;
+        console.log('[LocalAPI renderer] next →', next);
+        setVariant(next);
+      } else if(t==='prev'){
+        const prev=activeVariant<=0?VARIANT_SLOT_COUNT-1:activeVariant-1;
+        console.log('[LocalAPI renderer] prev →', prev);
+        setVariant(prev);
+      } else {
+        const n=parseInt(t);
+        if(!isNaN(n)){
+          const idx=n<0?-1:Math.min(n,VARIANT_SLOT_COUNT-1);
+          console.log('[LocalAPI renderer] setVariant by index →', idx);
+          setVariant(idx);
+        } else {
+          const idx=variants.findIndex(v=>v.label===t);
+          if(idx<0){
+            console.warn('[LocalAPI renderer] variant name "'+t+'" not found. registered labels:',
+              variants.map((v,i)=>`[${i}]"${v.label}"`).join(', '));
+          } else {
+            console.log('[LocalAPI renderer] setVariant by name "'+t+'" → idx:', idx);
+          }
+          if(idx>=0) setVariant(idx);
+        }
+      }
+    } else if(cmd.type==='action'){
+      const t=cmd.target;
+      if(t==='stop'){
+        console.log('[LocalAPI renderer] stopAction');
+        stopAction(cmd.params?.variant!=null?parseInt(cmd.params.variant):undefined);
+        return;
+      }
+      let idx=-1;
+      const n=parseInt(t);
+      if(!isNaN(n)) idx=n;
+      else idx=actions.findIndex(a=>a.label===t);
+      if(idx<0){
+        console.warn('[LocalAPI renderer] action name "'+t+'" not found. registered labels:',
+          actions.map((a,i)=>`[${i}]"${a.label}"`).join(', '));
+        return;
+      }
+      if(idx>=ACTION_SLOT_COUNT){
+        console.warn('[LocalAPI renderer] action idx out of range:', idx);
+        return;
+      }
+      console.log('[LocalAPI renderer] action target="'+t+'" → idx:', idx, '("'+actions[idx].label+'")');
+      // loop / span をAPIパラメータで一時的に上書きして再生
+      const savedLoop=actions[idx].loop, savedSpan=actions[idx].span;
+      if(cmd.params?.loop!=null) actions[idx].loop=cmd.params.loop;
+      if(cmd.params?.span!=null) actions[idx].span=cmd.params.span;
+      console.log('[LocalAPI renderer] playAction('+idx+') loop='+actions[idx].loop+' span='+actions[idx].span);
+      playAction(idx);
+      // 再生開始後にデフォルト値に戻す（次回のデフォルト再生に影響させない）
+      actions[idx].loop=savedLoop; actions[idx].span=savedSpan;
+    } else {
+      console.warn('[LocalAPI renderer] unknown cmd type:', cmd.type);
+    }
+  });
+
+  // ローカルAPI を設定に従って起動
+  if(cfg.localApiEnabled) startOrRestartLocalApi();
 })();

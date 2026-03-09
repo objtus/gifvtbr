@@ -32,6 +32,7 @@
     <div class="tabs">
       <div class="tab active" onclick="switchTab('layers')">🧩 ベースレイヤー</div>
       <div class="tab" onclick="switchTab('variants')">🎭 差分スロット</div>
+      <div class="tab" onclick="switchTab('actions')">⚡ ワンショット</div>
       <div class="tab" onclick="switchTab('blink')">👁️ まばたき</div>
       <div class="tab" onclick="switchTab('audio')">🎤 リップシンク</div>
       <div class="tab" onclick="switchTab('anim')">🌬️ アニメーション</div>
@@ -182,6 +183,16 @@
         <div style="font-size:12px;color:#94a3b8">ショートカット：<strong style="color:#a78bfa">Ctrl+1〜9</strong> / <strong style="color:#a78bfa">Ctrl+↑←→</strong>（同キーで解除）・<strong style="color:#a78bfa">Ctrl+0 / Ctrl+↓</strong> でリセット</div>
       </div>
       <div class="variant-list" id="variant-list"></div>
+    </div>
+
+    <!-- ── ワンショットタブ ── -->
+    <div class="tab-content" id="tab-actions">
+      <div class="info-banner">
+        <strong>ワンショット</strong>はトリガーして終わる「イベント」です。差分スロットとは独立したレーンです。<br>
+        再生中は登録レイヤーをベース/差分の上に上書きし、終了後は元の状態に自動復元します。<br>
+        ショートカット：<strong style="color:#a78bfa">Ctrl+Alt+1〜8</strong>（同キーで停止）
+      </div>
+      <div class="action-list" id="action-list"></div>
     </div>
 
     <!-- ── まばたきタブ ── -->
@@ -410,6 +421,33 @@
         <!-- Electron用（ネイティブダイアログ） -->
         <div class="row" style="margin-top:8px;display:none" id="import-row-electron">
           <button class="btn" onclick="importProject()">📂 ファイルを選択して読み込む</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="sec-title">🌐 ローカルAPI</div>
+        <div class="sec-note">localhost の指定ポートで HTTP サーバーを起動します。StreamDeck・コメントビューワー等の外部ツールから差分切替・アクション再生を制御できます。</div>
+        <div class="row"><label>有効</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="local-api-enabled"
+              onchange="cfg.localApiEnabled=this.checked;this.checked?startOrRestartLocalApi():stopLocalApiRenderer()">
+            <span style="font-size:11px;color:#94a3b8">ON で起動</span>
+          </label></div>
+        <div class="row"><label>ポート番号</label>
+          <input type="number" min="1024" max="65535" value="3000" id="local-api-port" style="width:80px"
+            oninput="cfg.localApiPort=parseInt(this.value)||3000;if(cfg.localApiEnabled)startOrRestartLocalApi()">
+        </div>
+        <div class="row"><label>状態</label>
+          <span id="local-api-status-dot" style="color:#6b7280">●</span>
+          <span id="local-api-status-text" style="font-size:11px;color:#94a3b8;margin-left:4px">停止中</span>
+        </div>
+        <div class="sec-note" style="margin-top:6px">
+          <strong>エンドポイント例:</strong><br>
+          <code style="font-size:10px;color:#a78bfa">GET /variant/0</code> 差分スロット0を適用<br>
+          <code style="font-size:10px;color:#a78bfa">GET /variant/reset</code> ベースに戻す<br>
+          <code style="font-size:10px;color:#a78bfa">GET /action/0</code> アクション0を再生<br>
+          <code style="font-size:10px;color:#a78bfa">GET /action/わらい?loop=3</code> 名前・ループ指定<br>
+          <code style="font-size:10px;color:#a78bfa">GET /action/stop</code> アクション停止<br>
+          <code style="font-size:10px;color:#a78bfa">GET /status</code> 現在の状態をJSON取得
         </div>
       </div>
       <div class="section">
