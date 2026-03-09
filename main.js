@@ -188,8 +188,9 @@ ipcMain.handle('start-local-api', (_event, port) => {
 
     let cmd = null;
     if (type === 'variant') {
-      const setMode = url.searchParams.has('set');
-      cmd = { type: 'variant', target, params: { set: setMode } };
+      const setMode   = url.searchParams.has('set');
+      const unsetMode = url.searchParams.has('unset');
+      cmd = { type: 'variant', target, params: { set: setMode, unset: unsetMode } };
     } else if (type === 'action') {
       const loop = url.searchParams.get('loop');
       const span = url.searchParams.get('span');

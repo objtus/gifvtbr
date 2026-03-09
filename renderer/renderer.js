@@ -1451,7 +1451,8 @@ function switchTab(name){
         console.log('[LocalAPI renderer] prev →', prev);
         setVariant(prev);
       } else {
-        const useSet=!!cmd.params?.set;
+        const useSet  =!!cmd.params?.set;
+        const useUnset=!!cmd.params?.unset;
         const n=parseInt(t);
         let idx;
         if(!isNaN(n)){
@@ -1467,10 +1468,18 @@ function switchTab(name){
           if(useSet){
             // ?set: 適用済みなら何もしない、未適用なら適用（トグル解除しない）
             const alreadyActive=activeVariants.includes(idx);
-            console.log('[LocalAPI renderer] setVariant(set mode) idx='+idx+' alreadyActive='+alreadyActive+' stackMode='+cfg.stackMode);
+            console.log('[LocalAPI renderer] ?set idx='+idx+' alreadyActive='+alreadyActive+' stackMode='+cfg.stackMode);
             if(!alreadyActive){
-              if(cfg.stackMode) toggleStackVariant(idx);  // スタックに追加
-              else              setVariant(idx);           // 単一適用
+              if(cfg.stackMode) toggleStackVariant(idx);
+              else              setVariant(idx);
+            }
+          } else if(useUnset){
+            // ?unset: 適用中なら解除、未適用なら何もしない（?set の逆）
+            const alreadyActive=activeVariants.includes(idx);
+            console.log('[LocalAPI renderer] ?unset idx='+idx+' alreadyActive='+alreadyActive+' stackMode='+cfg.stackMode);
+            if(alreadyActive){
+              if(cfg.stackMode) toggleStackVariant(idx);  // スタックから取り除く
+              else              setVariant(-1);            // ベースにリセット
             }
           } else {
             console.log('[LocalAPI renderer] toggleVariant idx='+idx+' stackMode='+cfg.stackMode);
