@@ -300,7 +300,7 @@ function resolveLayer(layer,state){
 const ACTION_LAYERS=['bg','body_torso','body_head','hand_r','hand_l','mouth','eyes','extra','fg'];
 const ACTION_SLOT_COUNT=8;
 const actions=Array.from({length:ACTION_SLOT_COUNT},(_,i)=>({
-  label:`アクション${i+1}`, inheritVariant:-1, loop:1, span:0, patches:{}
+  label:`アクション${i+1}`, loop:1, span:0, patches:{}
 }));
 // patches キーはレイヤー名（'eyes' 等）。差分スロットの 'eyes-open' 形式と異なりステート問わず1枚固定
 let activeAction=-1, actionLoopCount=0, preActionVariants=[], actionSpanTimer=null;
@@ -959,9 +959,6 @@ function clearActionPatch(ai, layer){
 function buildActionList(){
   const list=document.getElementById('action-list'); if(!list) return;
   list.innerHTML='';
-  // 引き継ぎ元 select のオプション HTML
-  const inheritOptions=`<option value="-1">ベース</option>`+
-    variants.map((v,vi)=>`<option value="${vi}">${v.label||'差分'+(vi+1)}</option>`).join('');
   actions.forEach((a,ai)=>{
     const card=document.createElement('div'); card.className='variant-card';
     const hdr=document.createElement('div'); hdr.className='variant-header';
@@ -976,14 +973,10 @@ function buildActionList(){
     body.className='variant-body'+(a.open?' open':'');
     hdr.addEventListener('click',()=>{ a.open=!a.open; body.classList.toggle('open',a.open); });
 
-    // 設定行: 引き継ぎ元 / ループ / スパン
+    // 設定行: ループ / スパン
     const cfg_row=document.createElement('div');
     cfg_row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center;font-size:11px';
     cfg_row.innerHTML=`
-      <label style="color:#94a3b8">引き継ぎ元:
-        <select style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;margin-left:4px"
-          onchange="actions[${ai}].inheritVariant=parseInt(this.value)">${inheritOptions}</select>
-      </label>
       <label style="color:#94a3b8">ループ:
         <input type="number" min="0" value="${a.loop}" style="width:48px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;margin-left:4px"
           oninput="actions[${ai}].loop=parseInt(this.value)||0">
@@ -994,9 +987,6 @@ function buildActionList(){
           oninput="actions[${ai}].span=parseInt(this.value)||0">
         <span style="color:#64748b">ms</span>
       </label>`;
-    // 引き継ぎ元の初期値を select に反映
-    const sel=cfg_row.querySelector('select');
-    if(sel) sel.value=a.inheritVariant;
     body.appendChild(cfg_row);
 
     // レイヤー行
@@ -1064,10 +1054,8 @@ function playAction(index){
   clearTimeout(blinkTimer);
   const a=actions[index];
   const patchCount=Object.keys(a.patches).length;
-  console.log('[action] playAction: index='+index+' label="'+a.label+'" inherit='+a.inheritVariant
+  console.log('[action] playAction: index='+index+' label="'+a.label+'"'
     +' loop='+a.loop+' span='+a.span+' patches='+patchCount);
-  // inheritVariant は単一適用（スタックは一時的に上書き）
-  activeVariants = a.inheritVariant<0 ? [] : [a.inheritVariant];
   updateActionBadges();
   doActionLoop();
 }
@@ -1123,7 +1111,7 @@ async function exportProject(){
       ),
     })),
     actions: actions.map(a=>({
-      label:a.label, inheritVariant:a.inheritVariant, loop:a.loop, span:a.span,
+      label:a.label, loop:a.loop, span:a.span,
       patches: Object.fromEntries(
         Object.entries(a.patches).filter(([,p])=>p?.src).map(([l,p])=>[l,{src:p.src}])
       ),
@@ -1211,7 +1199,6 @@ function applyProject(proj){
   (proj.actions||[]).forEach((pa,ai)=>{
     if(!actions[ai]) return;
     actions[ai].label=pa.label||actions[ai].label;
-    actions[ai].inheritVariant=pa.inheritVariant??-1;
     actions[ai].loop=pa.loop??1;
     actions[ai].span=pa.span??0;
     actions[ai].patches={};
