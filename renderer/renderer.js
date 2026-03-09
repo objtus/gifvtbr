@@ -8,6 +8,7 @@ const cfg = {
   lipsyncLevels:[0,5,15,30,60], // [closed,small,open,wide,shout] の下限閾値（RMS %）
   bandSplit:false,               // 帯域分割モード（true=中域RMS主軸、false=全域RMS）
   sibilantThreshold:15,          // 歯擦音判定閾値（bandSplit有効時のみ）
+  roundedThreshold:10,           // 丸口判定閾値（bandSplit有効時のみ）
   blinkMode:'2', blinkInterval:4, blinkJitter:.4, blinkFrameMs:50,
   breathAmp:.012, breathPeriod:3.5,
   bounceAmp:5, bouncePeriod:220,
@@ -152,7 +153,7 @@ const BASE = {
   bg:{default:null}, body_torso:{default:null}, body_head:{default:null},
   hand_r:{default:null,mouse:null}, hand_l:{default:null,keyboard:null},
   eyes:{open:null,half:null,closed:null,blinkgif:null},
-  mouth:{closed:null,small:null,open:null,wide:null,shout:null},
+  mouth:{closed:null,small:null,open:null,wide:null,shout:null,sibilant:null,rounded:null},
   extra:{default:null}, fg:{default:null},
 };
 const BASE_SRCS = {}; // key="layer__state" → dataURL（保存用）
@@ -206,6 +207,8 @@ const PATCHABLE=[
   {id:'mouth-open',        label:'口_開',       layer:'mouth',     state:'open'},
   {id:'mouth-wide',        label:'口_大',       layer:'mouth',     state:'wide'},
   {id:'mouth-shout',       label:'口_叫',       layer:'mouth',     state:'shout'},
+  {id:'mouth-sibilant',    label:'口_歯擦',     layer:'mouth',     state:'sibilant'},
+  {id:'mouth-rounded',     label:'口_丸',       layer:'mouth',     state:'rounded'},
   {id:'hand_r-default',    label:'右手_通常',   layer:'hand_r',    state:'default'},
   {id:'hand_r-mouse',      label:'右手_マウス', layer:'hand_r',    state:'mouse'},
   {id:'hand_l-default',    label:'左手_通常',   layer:'hand_l',    state:'default'},
@@ -255,7 +258,7 @@ function resolveMouth(level){
 // ══════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════
-const S={talking:false,shouting:false,blinkFrame:0,isMouseActive:false,isKbActive:false,mouthLevel:0};
+const S={talking:false,shouting:false,blinkFrame:0,isMouseActive:false,isKbActive:false,mouthLevel:0,mouthShape:null};
 
 // ══════════════════════════════════════════
 //  CANVAS
@@ -392,8 +395,12 @@ function render(now, animNow){
   const headImg=resolveLayer('body_head','default');
   if(headImg) drawBreath(headImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
-  // 口（5段階リップシンク。未登録ステートは下位にフォールバック）
-  const mImg=resolveMouth(S.mouthLevel);
+  // 口（形状オーバーライド優先。未登録時は mouthLevel フォールバック）
+  let mImg=null;
+  if(cfg.bandSplit && S.mouthShape)
+    mImg=resolveLayer('mouth',S.mouthShape)||resolveMouth(S.mouthLevel);
+  else
+    mImg=resolveMouth(S.mouthLevel);
   if(mImg) drawBreath(mImg,cx,cy,hV.sY,hV.bY,gifWobble(animNow,2.1));
 
   // 目（まばたき状態は常に最新、GIF再生フレームも随時反映）
@@ -615,22 +622,30 @@ function tickAudio(){
   const sMark=document.getElementById('shout-marker');
   if(sMark) sMark.style.left=Math.min(lvls[4],100)+'%';
 
-  // 口レベル判定: 帯域分割モードまたは全域RMS
-  let signal;
+  // 口レベルと形状を決定して適用
+  let signal, bandH=0, bandL=0;
+  S.mouthShape=null;
   if(cfg.bandSplit){
-    // 中域（460〜1840Hz相当）をスムージングして主信号にする
     const mid=_freqBandAvg(20,80);
     _smoothedMid=_smoothedMid*cfg.audioSmoothing+mid*(1-cfg.audioSmoothing);
+    bandH=_freqBandAvg(80,150); // 高域（歯擦音）
+    bandL=_freqBandAvg(0,20);   // 低域（丸口）
     signal=_smoothedMid;
-    // 歯擦音検出: 高域が強く中域が弱い → open(2)未満に制限しつつ small(1) 以上を保証
-    const high=_freqBandAvg(80,150);
-    if(high>=cfg.sibilantThreshold && signal<lvls[2]) signal=Math.max(signal,lvls[1]);
+    // 歯擦音: 高域強・中域弱 → signal を small(1) 以上に保証
+    if(bandH>=cfg.sibilantThreshold && signal<lvls[2]) signal=Math.max(signal,lvls[1]);
   } else {
     signal=_smoothedAvg;
   }
   // 5段階レベル判定（上位から順に比較）
   let newLevel=0;
   for(let i=lvls.length-1;i>=1;i--){ if(signal>=lvls[i]){ newLevel=i; break; } }
+  // 形状オーバーライド判定（bandSplit ON かつ発話中のみ）
+  if(cfg.bandSplit && newLevel>=1){
+    if(bandH>=cfg.sibilantThreshold && newLevel<=2)
+      S.mouthShape='sibilant'; // 歯擦音: 高域突出・small〜open 音量帯
+    else if(bandL>=cfg.roundedThreshold && bandH<cfg.sibilantThreshold && newLevel<=3)
+      S.mouthShape='rounded';  // 丸口: 低域優位・叫び未満
+  }
   _applyMouthLevel(newLevel);
 }
 initAudio();
@@ -886,6 +901,7 @@ function syncCfgToUI(){
   (cfg.lipsyncLevels||[]).forEach((v,i)=>{ if(i>=1){ sv(`ls-level-${i}`,v); st(`v-ls${i}`,v); } });
   if(el('band-split')) el('band-split').checked=!!cfg.bandSplit;
   sv('sibilant-threshold',cfg.sibilantThreshold); st('v-sib',cfg.sibilantThreshold);
+  sv('rounded-threshold',cfg.roundedThreshold);   st('v-rnd',cfg.roundedThreshold);
   sv('breath-amp',Math.round(cfg.breathAmp*1000)); st('v-ba',Math.round(cfg.breathAmp*1000));
   sv('breath-period',Math.round(cfg.breathPeriod*10)); st('v-bp',cfg.breathPeriod.toFixed(1));
   sv('bounce-amp',cfg.bounceAmp);          st('v-boa',cfg.bounceAmp);

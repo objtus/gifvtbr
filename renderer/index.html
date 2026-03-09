@@ -149,6 +149,13 @@
         <div class="row"><label>口_叫</label>
           <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','shout',this)">
           <img class="thumb" id="th-mouth-shout"></div>
+        <div class="sec-note" style="margin-top:8px">以下は帯域分割モード ON 時のみ使用される形状素材です（任意）。未登録の場合は音量ベースの口にフォールバックします。</div>
+        <div class="row"><label>口_歯擦（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','sibilant',this)">
+          <img class="thumb" id="th-mouth-sibilant"></div>
+        <div class="row"><label>口_丸（任意）</label>
+          <input type="file" accept="image/*,.gif" onchange="loadBase('mouth','rounded',this)">
+          <img class="thumb" id="th-mouth-rounded"></div>
       </div>
 
       <!-- 追加レイヤー -->
@@ -264,7 +271,7 @@
       </div>
       <div class="section">
         <div class="sec-title">🎛️ 帯域分割モード（施策D）</div>
-        <div class="sec-note">ONにすると全域RMSの代わりに<strong>中域（460〜1840Hz）</strong>を口開き判定の主軸にします。声の「実体」に反応しやすくなります。<br>歯擦音（サ行・ハ行）を高域で検出し、口_小として扱います。</div>
+        <div class="sec-note">ONにすると全域RMSの代わりに<strong>中域（460〜1840Hz）</strong>を口開き判定の主軸にします。声の「実体」に反応しやすくなります。</div>
         <div class="row"><label>帯域分割</label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
             <input type="checkbox" id="band-split" onchange="cfg.bandSplit=this.checked">
@@ -274,7 +281,12 @@
           <input type="range" min="1" max="50" value="15" id="sibilant-threshold"
             oninput="cfg.sibilantThreshold=+this.value;document.getElementById('v-sib').textContent=this.value">
           <span class="val" id="v-sib">15</span></div>
-        <div class="sec-note">歯擦音が強く中域が弱い場合に口_小を表示します（bandSplit ON 時のみ有効）。</div>
+        <div class="sec-note" style="margin-bottom:4px">歯擦音（高域強・中域弱）を検出すると<strong>口_歯擦</strong>を表示します。未登録の場合は口_小にフォールバック。</div>
+        <div class="row"><label>丸口閾値 (%)</label>
+          <input type="range" min="1" max="50" value="10" id="rounded-threshold"
+            oninput="cfg.roundedThreshold=+this.value;document.getElementById('v-rnd').textContent=this.value">
+          <span class="val" id="v-rnd">10</span></div>
+        <div class="sec-note">低域（〜460Hz）が閾値以上かつ歯擦音でない場合に<strong>口_丸</strong>を表示します（叫び未満の音量帯のみ）。未登録の場合は音量ベースの口にフォールバック。</div>
       </div>
     </div>
 
