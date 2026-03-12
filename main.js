@@ -176,6 +176,104 @@ function startGlobalHotkey() {
 //  ローカルAPI（localhost HTTP サーバー）
 //  Node.js 標準 http のみ使用（express 不要）
 // ══════════════════════════════════════════
+const DASHBOARD_HTML = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gifvtbr Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f0f11;color:#e2d9ff;font-family:'Segoe UI',sans-serif;font-size:13px;padding:16px;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.08)}
+header h1{font-size:14px;font-weight:700;color:#a78bfa;letter-spacing:.03em}
+#active-bar{font-size:11px;color:#6b7280}
+#active-label{color:#c4b5fd;font-weight:600}
+section{margin-bottom:20px}
+section h2{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.grid{display:flex;flex-wrap:wrap;gap:6px}
+.btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#c4b5fd;border-radius:8px;padding:7px 14px;cursor:pointer;font-size:12px;transition:all .15s;white-space:nowrap}
+.btn:hover{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.5)}
+.btn.active{background:rgba(167,139,250,.3);border-color:#a78bfa;color:#fff;font-weight:600}
+.btn.reset{color:#f87171;border-color:rgba(248,113,113,.3)}
+.btn.reset:hover{background:rgba(248,113,113,.12)}
+.btn.act{color:#86efac;border-color:rgba(134,239,172,.25)}
+.btn.act:hover{background:rgba(134,239,172,.12)}
+.empty{font-size:11px;color:#4b5563;font-style:italic}
+.active-var{cursor:pointer;border-radius:4px;padding:1px 3px;transition:background .12s,color .12s}
+.active-var:hover{background:rgba(248,113,113,.2);color:#f87171;text-decoration:line-through}
+</style></head><body>
+<header>
+  <h1>🎭 gifvtbr</h1>
+  <div id="active-bar">active: <span id="active-label">–</span></div>
+</header>
+<section>
+  <h2>差分スロット</h2>
+  <div class="grid" id="vgrid"><span class="empty">読み込み中...</span></div>
+</section>
+<section>
+  <h2>ワンショットアクション</h2>
+  <div class="grid" id="agrid"><span class="empty">読み込み中...</span></div>
+</section>
+<script>
+let vdata=[],adata=[];
+async function init(){
+  try{
+    const d=await fetch('/info').then(r=>r.json());
+    vdata=d.variants; adata=d.actions;
+    buildVariants(); buildActions();
+    tick(); setInterval(tick,1200);
+  }catch(e){ document.getElementById('vgrid').innerHTML='<span class="empty">API未接続</span>'; }
+}
+function buildVariants(){
+  const g=document.getElementById('vgrid'); g.innerHTML='';
+  const rb=mkbtn('× ベース','btn reset',()=>api('/variant/reset'));
+  g.appendChild(rb);
+  vdata.forEach(v=>{
+    const lbl=v.label||('差分'+(v.i+1));
+    g.appendChild(mkbtn(lbl,'btn',()=>api('/variant/'+encodeURIComponent(lbl)),{id:'v'+v.i}));
+  });
+}
+function buildActions(){
+  const g=document.getElementById('agrid'); g.innerHTML='';
+  if(!adata.length){g.innerHTML='<span class="empty">なし</span>';return;}
+  adata.forEach(a=>{
+    const lbl=a.label||('アクション'+(a.i+1));
+    g.appendChild(mkbtn('▷ '+lbl,'btn act',()=>api('/action/'+encodeURIComponent(lbl))));
+  });
+}
+function mkbtn(text,cls,onClick,attrs={}){
+  const b=document.createElement('button');
+  b.className=cls; b.textContent=text; b.onclick=onClick;
+  Object.keys(attrs).forEach(k=>b.setAttribute(k,attrs[k]));
+  return b;
+}
+async function api(path){ try{ await fetch(path); tick(); }catch(e){} }
+async function tick(){
+  try{
+    const d=await fetch('/status').then(r=>r.json());
+    document.querySelectorAll('[id^="v"]').forEach(b=>b.classList.remove('active'));
+    const av=d.activeVariants||[];
+    av.forEach(i=>{ const b=document.getElementById('v'+i); if(b) b.classList.add('active'); });
+    const bar=document.getElementById('active-label');
+    if(av.length>0){
+      bar.innerHTML='';
+      av.forEach((i,idx)=>{
+        if(idx>0){ const sep=document.createElement('span'); sep.textContent=' + '; sep.style.color='#6b7280'; bar.appendChild(sep); }
+        const v=vdata.find(v=>v.i===i);
+        const lbl=v?.label||('差分'+(i+1));
+        const sp=document.createElement('span');
+        sp.className='active-var'; sp.textContent=lbl; sp.title='クリックで解除';
+        sp.onclick=()=>api('/variant/'+encodeURIComponent(lbl)+'?unset');
+        bar.appendChild(sp);
+      });
+    } else {
+      bar.textContent='ベース';
+    }
+  }catch(e){}
+}
+init();
+</script>
+</body></html>`;
+
 ipcMain.handle('start-local-api', (_event, port) => {
   stopLocalApi();
   const http = require('http');
@@ -186,6 +284,24 @@ ipcMain.handle('start-local-api', (_event, port) => {
     const target = segments[1];
     console.log(`[LocalAPI] ${req.method} ${req.url}  →  type="${type}" target="${target}"`);
 
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // ダッシュボード
+    if (type === 'dashboard' || url.pathname === '/' || url.pathname === '') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.writeHead(200); res.end(DASHBOARD_HTML); return;
+    }
+    // 情報エンドポイント（差分・アクションのラベル一覧）
+    if (type === 'info') {
+      res.setHeader('Content-Type', 'application/json');
+      win.webContents.executeJavaScript(
+        'JSON.stringify({variants:variants.map((v,i)=>({i,label:v.label})),actions:actions.map((a,i)=>({i,label:a.label}))})'
+      ).then(json => { res.writeHead(200); res.end(json); })
+       .catch(() => { res.writeHead(500); res.end(JSON.stringify({ok:false})); });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/json');
     let cmd = null;
     if (type === 'variant') {
       const setMode   = url.searchParams.has('set');
@@ -200,8 +316,6 @@ ipcMain.handle('start-local-api', (_event, port) => {
       cmd = { type: 'status' };
     }
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/json');
     if (!cmd) {
       console.warn(`[LocalAPI] 404: unknown type "${type}"`);
       res.writeHead(404); res.end(JSON.stringify({ok:false,error:'not found'})); return;
