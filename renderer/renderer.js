@@ -275,9 +275,10 @@ const PATCHABLE=[
 ];
 
 // ショートカットキーの表示ラベル（スロットインデックス対応）
-// スロット 0-8: Ctrl+1〜9、スロット 9-11: Ctrl+↑←→
-const VARIANT_KEYS=['1','2','3','4','5','6','7','8','9','↑','←','→'];
-const VARIANT_SLOT_COUNT=12;
+// スロット 0-8: Ctrl+1〜9、スロット 9-11: Ctrl+↑←→、スロット 12-23: APIオンリー
+const VARIANT_KEYS=['1','2','3','4','5','6','7','8','9','↑','←','→',
+  '','','','','','','','','','','',''];
+const VARIANT_SLOT_COUNT=24;
 
 const variants=Array.from({length:VARIANT_SLOT_COUNT},(_,i)=>({label:`差分${i+1}`,patches:{},open:false}));
 let activeVariants=[];  // スタック。末尾が最高優先度（単一モード時は最大1要素）
@@ -880,7 +881,9 @@ function buildVariantList(){
     const card=document.createElement('div'); card.className='variant-card';
     const hdr=document.createElement('div'); hdr.className='variant-header';
     hdr.innerHTML=`
-      <div class="variant-key" title="Ctrl+${VARIANT_KEYS[vi]}">${VARIANT_KEYS[vi]}</div>
+      ${VARIANT_KEYS[vi]
+        ? `<div class="variant-key" title="Ctrl+${VARIANT_KEYS[vi]}">${VARIANT_KEYS[vi]}</div>`
+        : `<div class="variant-key variant-key-api" title="APIのみ">API</div>`}
       <input class="variant-name-input" type="text" value="${v.label}"
         onclick="event.stopPropagation()" oninput="variants[${vi}].label=this.value">
       <div class="variant-active-badge ${activeVariants.includes(vi)?'show':''}">● ACTIVE</div>

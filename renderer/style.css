@@ -109,6 +109,7 @@ input[type=text]{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,
   background:rgba(255,255,255,.035);border-bottom:1px solid rgba(255,255,255,.07);
   cursor:pointer;user-select:none}
 .variant-key{font-size:18px;font-weight:800;color:#a78bfa;min-width:22px;text-align:center}
+.variant-key-api{font-size:9px;font-weight:700;color:#6b7280;background:rgba(107,114,128,.15);border:1px solid rgba(107,114,128,.3);border-radius:4px;padding:2px 4px;letter-spacing:.04em}
 .variant-name-input{
   flex:1;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.2);
   color:#e2d9ff;font-size:13px;font-weight:600;padding:2px 4px;outline:none}
